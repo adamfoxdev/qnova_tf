@@ -172,7 +172,7 @@ public static class GameCommands
             foreach (var act in KeyBindings.All) c.Print($"{KeyBindings.Name(act),-11} {KeyBindings.Display(kb.Get(act))}");
         });
 
-        c.AddCommand("map", "map [arena|random [seed]]", "Show the current map, load the classic arena, or generate a random one (same seed = same map)", a =>
+        c.AddCommand("map", "map [arena|random [seed]|file <path>|save <path>]", "Show the current map, load the classic arena, generate a random one (same seed = same map), load a map file from the editor, or save the current map as JSON", a =>
         {
             if (a.Length == 0) { c.Print($"current map: {g.MapName}" + (g.MapSeed > 0 ? $" (seed {g.MapSeed})" : "")); return; }
             if (a[0].Equals("arena", StringComparison.OrdinalIgnoreCase)) { g.LoadClassicArena(); return; }
@@ -183,8 +183,22 @@ public static class GameCommands
                 g.LoadRandomMap(seed);
                 return;
             }
-            c.Print("usage: map [arena|random [seed]]");
+            if (a[0].Equals("file", StringComparison.OrdinalIgnoreCase) && a.Length > 1)
+            {
+                try { g.LoadMapFile(string.Join(' ', a.Skip(1))); }
+                catch (MapFormatException e) { c.Print($"can't load map: {e.Message}"); }
+                return;
+            }
+            if (a[0].Equals("save", StringComparison.OrdinalIgnoreCase) && a.Length > 1)
+            {
+                string path = string.Join(' ', a.Skip(1));
+                try { File.WriteAllText(path, MapJson.ToJson(g.SnapshotMap())); c.Print($"saved {path}"); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { c.Print($"can't write {path}: {e.Message}"); }
+                return;
+            }
+            c.Print("usage: map [arena | random [seed] | file <path> | save <path>]");
         });
+        c.AddCommand("mapcheck", "mapcheck", "Check the current map for stuck spawns, unreachable or floating items and bad jump pads", a => g.PrintCheck(MapCheck.Check(g.SnapshotMap())));
         c.AddCvar("capturelimit", g.CaptureLimit, "Captures needed to win a capture-the-flag match", v => g.CaptureLimit = Math.Max(1, (int)v));
         c.AddCommand("gamemode", "gamemode [dm|ctf]", "Show or switch the game mode (reloads the current map)", a =>
         {

@@ -41,6 +41,27 @@ public sealed partial class GameWorld
     MapData? _current;
 
     public bool IsCtf => Mode == GameMode.Ctf;
+
+    /// <summary>The loaded map as data (for saving and checking). A game built directly by <see cref="Arena.Build"/> never went through LoadMap.</summary>
+    public MapData SnapshotMap() => _current ?? (MapName == "Classic Arena" ? Arena.Data() : MapData.From(this, MapName, MapSeed, MapHalf, CeilingY));
+
+    /// <summary>Load a map file made with the editor, then print anything <see cref="MapCheck"/> finds wrong with it.</summary>
+    public MapData LoadMapFile(string path)
+    {
+        var m = MapJson.Load(path);
+        LoadMap(m);
+        Console.Print($"{m.Summary}");
+        PrintCheck(MapCheck.Check(m));
+        return m;
+    }
+
+    public void PrintCheck(MapCheck.Result r)
+    {
+        foreach (var e in r.Errors.Take(10)) Console.Print($"ERROR: {e}");
+        if (r.Errors.Count > 10) Console.Print($"...and {r.Errors.Count - 10} more errors");
+        foreach (var w in r.Warnings.Take(5)) Console.Print($"warning: {w}");
+        Console.Print(!r.Ok ? $"map check: {r.Errors.Count} error(s), {r.Warnings.Count} warning(s)" : r.Warnings.Count == 0 ? "map check: OK" : $"map check: playable, {r.Warnings.Count} warning(s)");
+    }
     public Flag? FlagOf(Team t) => Flags.FirstOrDefault(f => f.Team == t);
     public bool Friendly(Player a, Player b) => Mode == GameMode.Ctf && a.Team != Team.None && a.Team == b.Team;
     public Flag? Carrying(Player p) => Flags.FirstOrDefault(f => f.Carrier == p);

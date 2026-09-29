@@ -81,7 +81,7 @@ public static class MapGenerator
     }
 
     /// <summary>Flood-fill the floor (player-sized cells) from the first spawn; every spawn, floor pickup, pad and stair foot must be reached.</summary>
-    static List<string> CheckReachability(MapData m, World w)
+    internal static List<string> CheckReachability(MapData m, World w)
     {
         const float Cell = 48f;
         int n = (int)MathF.Ceiling(m.Half * 2f / Cell);
