@@ -216,7 +216,7 @@ public class KeyBindingTests
         var g = Game();
         var m = MenuModel.Create(g, () => false, () => { }, () => { });
         m.SetSelected(4); m.Select();                        // OPTIONS
-        m.SetSelected(9);                                    // KEY BINDINGS
+        m.SetSelected(10);                                   // KEY BINDINGS
         Assert.Equal("KEY BINDINGS", m.SelectedItem.Label());
         m.Select();
         Assert.Equal("KEY BINDINGS", m.Current.Title);

@@ -53,6 +53,7 @@ public sealed class PlayerMove
     public bool AutoHop;        // false = must release jump between jumps (classic Quake)
     bool _jumpHeld;
 
+    public float SpeedScale = 1f;   // class run-speed multiplier
     public bool NoClip;         // fly through geometry (cheat)
     public Vector3? HookAnchor; // set while a grappling hook is attached: the player is reeled in toward it
     bool _swinging;             // hooked with jump held: the rope acts as a fixed-length line (pendulum) instead of reeling
@@ -100,7 +101,8 @@ public sealed class PlayerMove
                     + RightFlat(cmd.Yaw) * (cmd.Side * MoveVars.MoveScale);
         float wishspeed = wishvel.Length();
         var wishdir = wishspeed > 1e-4f ? wishvel / wishspeed : Vector3.Zero;
-        if (wishspeed > _s.MaxSpeed) wishspeed = _s.MaxSpeed;
+        float maxSpeed = _s.MaxSpeed * SpeedScale;
+        if (wishspeed > maxSpeed) wishspeed = maxSpeed;
 
         if (HookAnchor is { } anchor) { HookMove(anchor, dt, cmd.Jump, wishdir, wishspeed); return; }
 

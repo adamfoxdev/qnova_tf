@@ -160,6 +160,18 @@ public sealed class MenuModel
                 if (g.Console.TryGet("cl_damagenumbers", out var v)) g.Console.Execute($"cl_damagenumbers {(v != 0 ? 0 : 1)}", echo: false);
             },
         });
+        options.Items.Add(new MenuItem
+        {
+            Label = () => "CLASS",
+            Value = () => ClassDef.Get(g.Player.NextClass).Name.ToUpperInvariant(),
+            OnAdjust = dir =>
+            {
+                int n = ClassDef.All.Length;
+                var next = ClassDef.All[((int)g.Player.NextClass - 1 + dir + n) % n].Id;
+                g.Player.NextClass = next;
+                if (g.IsTf && !hasStarted()) g.RespawnPlayer(g.Player);      // before the game starts the change is immediate
+            },
+        });
         options.Items.Add(new MenuItem { Label = () => "KEY BINDINGS", OnSelect = () => m.Push(keys) });
         options.Items.Add(new MenuItem { Label = () => "BACK", OnSelect = () => m.Back() });
 
@@ -184,13 +196,19 @@ public sealed class MenuModel
         root.Items.Add(new MenuItem
         {
             Label = () => "GAME MODE",
-            Value = () => g.IsCtf ? "CAPTURE THE FLAG" : "DEATHMATCH",
-            OnSelect = () => { g.SetMode(g.IsCtf ? GameMode.Deathmatch : GameMode.Ctf); start(); },
-            OnAdjust = _ => g.SetMode(g.IsCtf ? GameMode.Deathmatch : GameMode.Ctf),
+            Value = () => g.IsTf ? "TEAM FORTRESS" : g.IsCtf ? "CAPTURE THE FLAG" : "DEATHMATCH",
+            OnSelect = () => { g.SetMode(NextMode(g.Mode, 1)); start(); },
+            OnAdjust = dir => g.SetMode(NextMode(g.Mode, dir)),
         });
         root.Items.Add(new MenuItem { Label = () => "OPTIONS", OnSelect = () => m.Push(options) });
         root.Items.Add(new MenuItem { Label = () => "QUIT", OnSelect = quit });
         return m;
+    }
+
+    static GameMode NextMode(GameMode m, int dir)
+    {
+        int n = Enum.GetValues<GameMode>().Length;
+        return (GameMode)(((int)m + (dir < 0 ? -1 : 1) + n) % n);
     }
 
     static MenuItem Slider(GameWorld g, string label, string cvar, float min, float max, float step, string fmt)

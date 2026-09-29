@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Qnova.Core;
 
-public enum GameMode { Deathmatch, Ctf }
+public enum GameMode { Deathmatch, Ctf, TeamFortress }
 public enum Team { None, Red, Blue }
 public enum FlagState { Home, Carried, Dropped }
 
@@ -63,14 +63,14 @@ public sealed partial class GameWorld
         Console.Print(!r.Ok ? $"map check: {r.Errors.Count} error(s), {r.Warnings.Count} warning(s)" : r.Warnings.Count == 0 ? "map check: OK" : $"map check: playable, {r.Warnings.Count} warning(s)");
     }
     public Flag? FlagOf(Team t) => Flags.FirstOrDefault(f => f.Team == t);
-    public bool Friendly(Player a, Player b) => Mode == GameMode.Ctf && a.Team != Team.None && a.Team == b.Team;
+    public bool Friendly(Player a, Player b) => IsCtf && a.Team != Team.None && a.Team == b.Team;
     public Flag? Carrying(Player p) => Flags.FirstOrDefault(f => f.Carrier == p);
 
     /// <summary>Switch mode and reload the current map so flags and teams are set up (or torn down) cleanly.</summary>
     public void SetMode(GameMode mode)
     {
         Mode = mode;
-        if (mode == GameMode.Ctf) while (Bots.Count < 3) AddBot();      // 2v2 with you and three bots
+        if (mode != GameMode.Deathmatch) while (Bots.Count < 3) AddBot();      // 2v2 with you and three bots
         if (_current == null && MapName == "Classic Arena" && Pickups.Count > 0) _current = Arena.Data();   // built directly, never loaded: adopt its authored bases
         if (_current != null) LoadMap(_current); else { SetupMode(); RespawnAll(); }
     }
@@ -81,7 +81,7 @@ public sealed partial class GameWorld
         Flags.Clear(); _teamSpawns.Clear();
         Array.Clear(TeamScore); Winner = Team.None; MatchOverUntil = 0;
         AssignTeams();
-        if (Mode != GameMode.Ctf) return;
+        if (!IsCtf) return;
 
         var (red, blue) = FlagBases();
         Flags.Add(new Flag { Team = Team.Red, Home = red, Pos = red });
@@ -113,10 +113,12 @@ public sealed partial class GameWorld
     /// <summary>You are Red; bots alternate Blue, Red, Blue... In deathmatch nobody has a team.</summary>
     public void AssignTeams()
     {
-        if (Mode != GameMode.Ctf) { foreach (var c in Combatants) c.Team = Team.None; return; }
+        if (!IsCtf) { foreach (var c in Combatants) c.Team = Team.None; return; }
         Player.Team = Team.Red;
         int i = 0;
         foreach (var b in Bots) b.Body.Team = (i++ % 2 == 0) ? Team.Blue : Team.Red;
+        int k = 0;                                   // bots take a spread of classes (you choose your own)
+        foreach (var b in Bots) b.Body.NextClass = ClassDef.All[(k++ * 5 + 1) % ClassDef.All.Length].Id;
         int reds = 0, blues = 0;
         foreach (var b in Bots) b.Role = b.Body.Team == Team.Red ? (reds++ == 0 ? BotRole.Attack : BotRole.Defend) : (blues++ == 0 ? BotRole.Attack : BotRole.Defend);
     }
@@ -127,7 +129,7 @@ public sealed partial class GameWorld
 
     void UpdateFlags()
     {
-        if (Mode != GameMode.Ctf || Flags.Count < 2) return;
+        if (!IsCtf || Flags.Count < 2) return;
         if (MatchOverUntil > 0)
         {
             if (Time < MatchOverUntil) return;

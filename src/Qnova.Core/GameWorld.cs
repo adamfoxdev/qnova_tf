@@ -128,6 +128,7 @@ public sealed partial class GameWorld
         UpdatePads();
         UpdatePickups();
         UpdateFlags();
+        UpdateMedics();
         UpdateProjectiles();
         foreach (var t in Targets)
             if (!t.Alive && Time >= t.RespawnAt) t.Health = 100;
@@ -170,7 +171,10 @@ public sealed partial class GameWorld
     {
         ReleaseHook(p);
         p.Move.Position = at; p.Move.Velocity = default; p.Move.OnGround = false;
-        p.Health = p.MaxHealth; p.RespawnAt = 0;
+        p.RespawnAt = 0;
+        if (IsTf) { ApplyClass(p); return; }
+        p.Class = PlayerClass.None; p.Move.SpeedScale = 1f; p.MaxHealth = 100; p.Health = 100;
+        if (p.IsBot) p.Owned = new HashSet<WeaponId>(Enum.GetValues<WeaponId>());
         if (p.IsBot) { p.Shells = 50; p.Nails = 200; p.Rockets = 25; p.Cells = 200; p.Slugs = 20; }
         else
         {

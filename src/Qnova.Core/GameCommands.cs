@@ -200,16 +200,29 @@ public static class GameCommands
         });
         c.AddCommand("mapcheck", "mapcheck", "Check the current map for stuck spawns, unreachable or floating items and bad jump pads", a => g.PrintCheck(MapCheck.Check(g.SnapshotMap())));
         c.AddCvar("capturelimit", g.CaptureLimit, "Captures needed to win a capture-the-flag match", v => g.CaptureLimit = Math.Max(1, (int)v));
-        c.AddCommand("gamemode", "gamemode [dm|ctf]", "Show or switch the game mode (reloads the current map)", a =>
+        c.AddCommand("gamemode", "gamemode [dm|ctf|tf]", "Show or switch the game mode (reloads the current map)", a =>
         {
-            if (a.Length == 0) { c.Print($"game mode: {(g.IsCtf ? "capture the flag" : "deathmatch")}"); return; }
+            if (a.Length == 0) { c.Print($"game mode: {(g.IsTf ? "team fortress" : g.IsCtf ? "capture the flag" : "deathmatch")}"); return; }
+            if (a[0].Equals("tf", StringComparison.OrdinalIgnoreCase)) { g.SetMode(GameMode.TeamFortress); c.Print("team fortress"); return; }
             if (a[0].Equals("ctf", StringComparison.OrdinalIgnoreCase)) { g.SetMode(GameMode.Ctf); c.Print("capture the flag"); }
             else if (a[0].Equals("dm", StringComparison.OrdinalIgnoreCase)) { g.SetMode(GameMode.Deathmatch); c.Print("deathmatch"); }
-            else c.Print("usage: gamemode [dm|ctf]");
+            else c.Print("usage: gamemode [dm|ctf|tf]");
+        });
+        c.AddCommand("class", "class [scout|soldier|demoman|medic|heavy|sniper|1-6]", "Team Fortress: show classes or pick your next one (applies when you respawn)", a =>
+        {
+            if (a.Length == 0)
+            {
+                c.Print($"you are: {(p.Class == PlayerClass.None ? "no class" : ClassDef.Get(p.Class).Name)}  next: {ClassDef.Get(p.NextClass).Name}");
+                for (int i = 0; i < ClassDef.All.Length; i++) { var d = ClassDef.All[i]; c.Print($"  {i + 1} {d.Name,-8} {d.Health,3} hp  speed {d.Speed:0.00}  {d.Blurb}"); }
+                return;
+            }
+            if (!ClassDef.TryParse(a[0], out var cls)) { c.Print($"unknown class \"{a[0]}\""); return; }
+            g.ChooseClass(cls);
+            if (!g.IsTf) c.Print("(classes only apply in team fortress: gamemode tf)");
         });
         c.AddCommand("flags", "flags", "Show the score and where each flag is", a =>
         {
-            if (!g.IsCtf) { c.Print("not in capture the flag (gamemode ctf)"); return; }
+            if (!g.IsCtf) { c.Print("not in capture the flag (gamemode ctf|tf)"); return; }
             c.Print($"RED {g.TeamScore[1]} - {g.TeamScore[2]} BLUE  (first to {g.CaptureLimit})");
             foreach (var f in g.Flags)
                 c.Print($"{f.Team.Label()} flag: {f.State}" + (f.Carrier != null ? $" by {f.Carrier.Name}" : ""));

@@ -165,6 +165,8 @@ public class MenuTests
         m.Adjust(1);
         Assert.Equal("ON", m.SelectedItem.Value!());
         m.Move(1);
+        Assert.Equal("CLASS", m.SelectedItem.Label());
+        m.Move(1);
         Assert.Equal("KEY BINDINGS", m.SelectedItem.Label());
         m.Move(1);
         Assert.Equal("BACK", m.SelectedItem.Label());
