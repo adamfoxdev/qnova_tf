@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Qnova Map Editor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: toolbar rail | canvas (top view or 3D) | inspector. Stacks on narrow screens. */
+:root {
+  --bg: #eceae6; --panel: #f7f6f3; --panel2: #e4e1db; --line: #cdc9c1; --fg: #23211e; --dim: #6d6961;
+  --accent: #0a7f96; --accent-fg: #ffffff; --sel: #c46a00;
+  --canvas: #d9d6cf; --grid: #c4c0b7; --grid2: #b3aea3; --low: #bdb3a0; --high: #f4efe2; --shell: #8a8579;
+  --danger: #b3261e; --warn: #9a6a00; --ok: #2d7a3e; --red: #c8352d; --blue: #2f62c9; --green: #2d8a46;
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a; --panel: #1c1f24; --panel2: #262a31; --line: #33383f; --fg: #e6e4df; --dim: #8f948f;
+    --accent: #3cc4dd; --accent-fg: #06222a; --sel: #ffb03a;
+    --canvas: #101215; --grid: #1d2126; --grid2: #2a2f36; --low: #4b4034; --high: #a89c86; --shell: #55524b;
+    --danger: #ff7b72; --warn: #e3b341; --ok: #56c271; --red: #ff5c52; --blue: #6b9cff; --green: #4cd07a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161a; --panel: #1c1f24; --panel2: #262a31; --line: #33383f; --fg: #e6e4df; --dim: #8f948f;
+  --accent: #3cc4dd; --accent-fg: #06222a; --sel: #ffb03a;
+  --canvas: #101215; --grid: #1d2126; --grid2: #2a2f36; --low: #4b4034; --high: #a89c86; --shell: #55524b;
+  --danger: #ff7b72; --warn: #e3b341; --ok: #56c271; --red: #ff5c52; --blue: #6b9cff; --green: #4cd07a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.4 var(--font); margin: 0; overflow: hidden; }
+#app { height: 100%; display: grid; grid-template-rows: auto 1fr auto; padding-inline: 12px; padding-block: 10px; gap: 8px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+h1 span { color: var(--dim); font-weight: 400; }
+.grow { flex: 1 1 auto; }
+button, select, input { font: inherit; color: inherit; }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--dim); }
+button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+select, input[type=text], input[type=number] { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; min-width: 0; }
+input[type=number] { width: 100%; font-family: var(--mono); font-size: 12px; }
+input[type=checkbox] { accent-color: var(--accent); }
+main { display: grid; grid-template-columns: 148px minmax(0, 1fr) 290px; gap: 8px; min-height: 0; }
+.rail, .side { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; overflow: auto; min-height: 0; }
+.rail { display: flex; flex-direction: column; gap: 4px; }
+.rail h2, .side h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; margin: 8px 0 4px; }
+.rail h2:first-child, .side h2:first-child { margin-top: 0; }
+.tool { display: flex; align-items: center; gap: 7px; text-align: left; width: 100%; }
+.tool i { width: 12px; height: 12px; border-radius: 3px; flex: none; display: inline-block; }
+.tool kbd { margin-left: auto; font: 11px var(--mono); color: var(--dim); }
+.tool.active kbd { color: inherit; opacity: .8; }
+.stage { position: relative; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; min-height: 0; min-width: 0; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.views { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; z-index: 2; }
+.hint { position: absolute; right: 10px; bottom: 8px; color: var(--dim); font: 11px var(--mono); z-index: 2; pointer-events: none; text-align: right; }
+.row { display: grid; grid-template-columns: 74px 1fr; gap: 6px; align-items: center; margin-bottom: 5px; }
+.row label { color: var(--dim); font-size: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.grid3 span { font: 10px var(--mono); color: var(--dim); text-align: center; }
+.tiny { font-size: 12px; color: var(--dim); }
+.issue { display: block; width: 100%; text-align: left; margin-bottom: 4px; padding: 4px 8px; font-size: 12px; }
+.issue.err { border-left: 3px solid var(--danger); }
+.issue.warn { border-left: 3px solid var(--warn); }
+.okline { color: var(--ok); font-weight: 500; }
+footer { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--dim); font: 11.5px var(--mono); }
+#status.bad { color: var(--danger); }
+dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; width: min(640px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog textarea { width: 100%; height: 260px; font: 12px var(--mono); background: var(--canvas); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; resize: vertical; }
+dialog h3 { margin: 0 0 8px; font-size: 14px; }
+.dlg-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  #app { height: auto; min-height: 100%; }
+  main { grid-template-columns: 1fr; }
+  .rail { flex-direction: row; flex-wrap: wrap; }
+  .rail h2 { width: 100%; }
+  .tool { width: auto; }
+  .stage { height: 60vh; }
+  .side { overflow: visible; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Qnova Map Editor <span id="mapTitle"></span></h1>
+    <span class="grow"></span>
+    <button id="btnUndo" title="Ctrl+Z">Undo</button>
+    <button id="btnRedo" title="Ctrl+Shift+Z">Redo</button>
+    <select id="tplSel" aria-label="Start from a template">
+      <option value="">New from template…</option>
+      <option value="arena">Classic Arena</option>
+      <option value="empty">Empty room</option>
+    </select>
+    <button id="btnImport">Import</button>
+    <button id="btnExport" class="primary">Export</button>
+  </header>
+
+  <main>
+    <nav class="rail" aria-label="Tools">
+      <h2>Tools</h2>
+      <button class="tool" data-tool="select"><i style="background:var(--fg)"></i>Select<kbd>V</kbd></button>
+      <button class="tool" data-tool="box"><i style="background:var(--low)"></i>Box<kbd>B</kbd></button>
+      <button class="tool" data-tool="spawn"><i style="background:var(--green)"></i>Spawn<kbd>S</kbd></button>
+      <button class="tool" data-tool="pickup"><i style="background:var(--warn)"></i>Pickup<kbd>P</kbd></button>
+      <button class="tool" data-tool="pad"><i style="background:var(--accent)"></i>Jump pad<kbd>J</kbd></button>
+      <button class="tool" data-tool="flagRed"><i style="background:var(--red)"></i>Red flag<kbd>R</kbd></button>
+      <button class="tool" data-tool="flagBlue"><i style="background:var(--blue)"></i>Blue flag<kbd>F</kbd></button>
+      <button class="tool" data-tool="dummy"><i style="background:var(--sel)"></i>Dummy<kbd>D</kbd></button>
+      <button class="tool" data-tool="light"><i style="background:#ffd36b"></i>Light<kbd>L</kbd></button>
+      <h2>Place</h2>
+      <select id="pickupKind" aria-label="Pickup type"></select>
+      <div class="row" style="margin-top:6px"><label for="brushY0">Base Y</label><input id="brushY0" type="number" value="0" step="16"></div>
+      <div class="row"><label for="brushY1">Top Y</label><input id="brushY1" type="number" value="128" step="16"></div>
+      <h2>View</h2>
+      <div class="row"><label for="snap">Snap</label>
+        <select id="snap"><option>8</option><option selected>16</option><option>32</option><option>64</option><option>128</option></select></div>
+      <label class="tiny"><input id="showDecor" type="checkbox"> show decor</label>
+      <label class="tiny"><input id="lockShell" type="checkbox" checked> lock shell</label>
+    </nav>
+
+    <section class="stage" id="stage">
+      <div class="views">
+        <button id="vTop" class="active">Top</button>
+        <button id="v3d">3D</button>
+        <button id="vFit">Fit</button>
+      </div>
+      <canvas id="cv" tabindex="0" aria-label="Map canvas"></canvas>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <aside class="side" id="side"></aside>
+  </main>
+
+  <footer>
+    <span id="status">Ready</span>
+    <span id="cursor"></span>
+    <span id="counts"></span>
+  </footer>
+</div>
+
+<dialog id="dlg">
+  <h3 id="dlgTitle"></h3>
+  <p class="tiny" id="dlgHelp"></p>
+  <textarea id="dlgText" spellcheck="false"></textarea>
+  <div class="dlg-actions" id="dlgActions"></div>
+</dialog>
+<input id="fileIn" type="file" accept=".json,application/json" hidden>
+
+<script>
+"use strict";
+const ARENA = {"format":1,"name":"Classic Arena","seed":0,"half":2048,"height":768,"playerSpawn":[-1900,28,-1900],"redFlag":[0,40,-1850],"blueFlag":[0,40,1850],"solids":[[-2048,-64,-2048,2048,0,2048],[-2048,768,-2048,2048,832,2048],[-2112,-64,-2048,-2048,832,2048],[2048,-64,-2048,2112,832,2048],[-2048,-64,-2112,2048,832,-2048],[-2048,-64,2048,2048,832,2112],[-384,0,-384,384,128,384],[720,0,-128,768,16,128],[-768,0,-128,-720,16,128],[-128,0,720,128,16,768],[-128,0,-768,128,16,-720],[672,0,-128,720,32,128],[-720,0,-128,-672,32,128],[-128,0,672,128,32,720],[-128,0,-720,128,32,-672],[624,0,-128,672,48,128],[-672,0,-128,-624,48,128],[-128,0,624,128,48,672],[-128,0,-672,128,48,-624],[576,0,-128,624,64,128],[-624,0,-128,-576,64,128],[-128,0,576,128,64,624],[-128,0,-624,128,64,-576],[528,0,-128,576,80,128],[-576,0,-128,-528,80,128],[-128,0,528,128,80,576],[-128,0,-576,128,80,-528],[480,0,-128,528,96,128],[-528,0,-128,-480,96,128],[-128,0,480,128,96,528],[-128,0,-528,128,96,-480],[432,0,-128,480,112,128],[-480,0,-128,-432,112,128],[-128,0,432,128,112,480],[-128,0,-480,128,112,-432],[384,0,-128,432,128,128],[-432,0,-128,-384,128,128],[-128,0,384,128,128,432],[-128,0,-432,128,128,-384],[-948,0,-948,-852,768,-852],[852,0,-948,948,768,-852],[-948,0,852,-852,768,948],[852,0,852,948,768,948],[-1048,0,-48,-952,768,48],[-48,0,-1048,48,768,-952],[-48,0,952,48,768,1048],[-1756,0,-1772,-1244,192,-1740],[-1772,0,-1756,-1740,192,-1244],[-1756,0,-1260,-1596,192,-1228],[-1404,0,-1260,-1244,192,-1228],[-1260,0,-1756,-1228,192,-1596],[-1260,0,-1404,-1228,192,-1244],[-1540,0,-1540,-1460,64,-1460],[1244,0,-1772,1756,192,-1740],[1740,0,-1756,1772,192,-1244],[1244,0,-1260,1404,192,-1228],[1596,0,-1260,1756,192,-1228],[1228,0,-1756,1260,192,-1596],[1228,0,-1404,1260,192,-1244],[1460,0,-1540,1540,64,-1460],[-1756,0,1740,-1244,192,1772],[-1772,0,1244,-1740,192,1756],[-1756,0,1228,-1596,192,1260],[-1404,0,1228,-1244,192,1260],[-1260,0,1244,-1228,192,1404],[-1260,0,1596,-1228,192,1756],[-1540,0,1460,-1460,64,1540],[1244,0,1740,1756,192,1772],[1740,0,1244,1772,192,1756],[1244,0,1228,1404,192,1260],[1596,0,1228,1756,192,1260],[1228,0,1244,1260,192,1404],[1228,0,1596,1260,192,1756],[1460,0,1460,1540,64,1540],[1792,0,-1024,2048,128,1024],[1408,0,-128,1456,16,128],[1456,0,-128,1504,32,128],[1504,0,-128,1552,48,128],[1552,0,-128,1600,64,128],[1600,0,-128,1648,80,128],[1648,0,-128,1696,96,128],[1696,0,-128,1744,112,128],[1744,0,-128,1792,128,128],[-648,0,252,-552,40,348],[552,0,-348,648,40,-252],[252,0,552,348,40,648],[-348,0,-648,-252,40,-552],[-1348,0,52,-1252,40,148],[52,0,1252,148,40,1348],[1152,0,652,1248,40,748],[-860,0,-1316,-540,96,-1284],[540,0,1284,860,96,1316],[-1316,0,540,-1284,96,860],[1284,0,-860,1316,96,-540],[-160,0,-1516,160,96,-1484],[-160,0,1484,160,96,1516]],"decor":[{"box":[-2048,704,-1584,2048,768,-1488],"surface":"metal"},{"box":[-2048,704,-560,2048,768,-464],"surface":"metal"},{"box":[-2048,704,464,2048,768,560],"surface":"metal"},{"box":[-2048,704,1488,2048,768,1584],"surface":"metal"},{"box":[-1584,672,-2048,-1488,704,2048],"surface":"metal"},{"box":[-560,672,-2048,-464,704,2048],"surface":"metal"},{"box":[464,672,-2048,560,704,2048],"surface":"metal"},{"box":[1488,672,-2048,1584,704,2048],"surface":"metal"},{"box":[-2048,0,-2048,2048,20,-2024],"surface":"metal"},{"box":[-2048,0,2024,2048,20,2048],"surface":"metal"},{"box":[-2048,0,-2048,-2024,20,2048],"surface":"metal"},{"box":[2024,0,-2048,2048,20,2048],"surface":"metal"},{"box":[-960,0,-960,-840,36,-840],"surface":"metal"},{"box":[-960,728,-960,-840,768,-840],"surface":"metal"},{"box":[-865.15936,278,-865.15936,-847.15936,322,-847.15936],"surface":"emissive","color":[255,150,60]},{"box":[840,0,-960,960,36,-840],"surface":"metal"},{"box":[840,728,-960,960,768,-840],"surface":"metal"},{"box":[847.15936,278,-865.15936,865.15936,322,-847.15936],"surface":"emissive","color":[255,150,60]},{"box":[-960,0,840,-840,36,960],"surface":"metal"},{"box":[-960,728,840,-840,768,960],"surface":"metal"},{"box":[-865.15936,278,847.15936,-847.15936,322,865.15936],"surface":"emissive","color":[255,150,60]},{"box":[840,0,840,960,36,960],"surface":"metal"},{"box":[840,728,840,960,768,960],"surface":"metal"},{"box":[847.15936,278,847.15936,865.15936,322,865.15936],"surface":"emissive","color":[255,150,60]},{"box":[-1060,0,-60,-940,36,60],"surface":"metal"},{"box":[-1060,728,-60,-940,768,60],"surface":"metal"},{"box":[-947,278,-9,-929,322,9],"surface":"emissive","color":[255,150,60]},{"box":[-60,0,-1060,60,36,-940],"surface":"metal"},{"box":[-60,728,-1060,60,768,-940],"surface":"metal"},{"box":[-9,278,-947,9,322,-929],"surface":"emissive","color":[255,150,60]},{"box":[-60,0,940,60,36,1060],"surface":"metal"},{"box":[-60,728,940,60,768,1060],"surface":"metal"},{"box":[-9,278,929,9,322,947],"surface":"emissive","color":[255,150,60]},{"box":[-1528,170,-1368,-1472,182,-1352],"surface":"emissive","color":[120,210,255]},{"box":[-1244,156,-1510,-1232,180,-1490],"surface":"emissive","color":[255,150,60]},{"box":[1472,170,-1368,1528,182,-1352],"surface":"emissive","color":[120,210,255]},{"box":[1232,156,-1510,1244,180,-1490],"surface":"emissive","color":[255,150,60]},{"box":[-1528,170,1632,-1472,182,1648],"surface":"emissive","color":[120,210,255]},{"box":[-1244,156,1490,-1232,180,1510],"surface":"emissive","color":[255,150,60]},{"box":[1472,170,1632,1528,182,1648],"surface":"emissive","color":[120,210,255]},{"box":[1232,156,1490,1244,180,1510],"surface":"emissive","color":[255,150,60]},{"box":[-384,128,-387,384,136,-381],"surface":"emissive","color":[255,90,30]},{"box":[-384,128,381,384,136,387],"surface":"emissive","color":[255,90,30]},{"box":[-387,128,-384,-381,136,384],"surface":"emissive","color":[255,90,30]},{"box":[381,128,-384,387,136,384],"surface":"emissive","color":[255,90,30]},{"box":[-354,128,-354,-326,178,-326],"surface":"metal"},{"box":[-352,178,-352,-328,202,-328],"surface":"emissive","color":[255,40,30]},{"box":[326,128,-354,354,178,-326],"surface":"metal"},{"box":[328,178,-352,352,202,-328],"surface":"emissive","color":[255,40,30]},{"box":[-354,128,326,-326,178,354],"surface":"metal"},{"box":[-352,178,328,-328,202,352],"surface":"emissive","color":[255,40,30]},{"box":[326,128,326,354,178,354],"surface":"metal"},{"box":[328,178,328,352,202,352],"surface":"emissive","color":[255,40,30]},{"box":[2012,226,-430,2028,274,-410],"surface":"emissive","color":[255,150,60]},{"box":[2012,226,410,2028,274,430],"surface":"emissive","color":[255,150,60]},{"box":[-1222,200,-2024,-1178,260,-2012],"surface":"emissive","color":[255,160,70]},{"box":[-1222,200,2012,-1178,260,2024],"surface":"emissive","color":[255,160,70]},{"box":[-2024,200,-1222,-2012,260,-1178],"surface":"emissive","color":[255,160,70]},{"box":[2012,200,-1222,2024,260,-1178],"surface":"emissive","color":[255,160,70]},{"box":[-22,200,-2024,22,260,-2012],"surface":"emissive","color":[255,160,70]},{"box":[-22,200,2012,22,260,2024],"surface":"emissive","color":[255,160,70]},{"box":[-2024,200,-22,-2012,260,22],"surface":"emissive","color":[255,160,70]},{"box":[2012,200,-22,2024,260,22],"surface":"emissive","color":[255,160,70]},{"box":[1178,200,-2024,1222,260,-2012],"surface":"emissive","color":[255,160,70]},{"box":[1178,200,2012,1222,260,2024],"surface":"emissive","color":[255,160,70]},{"box":[-2024,200,1178,-2012,260,1222],"surface":"emissive","color":[255,160,70]},{"box":[2012,200,1178,2024,260,1222],"surface":"emissive","color":[255,160,70]},{"box":[-1356,664,-1356,-1244,672,-1244],"surface":"emissive","color":[255,214,150]},{"box":[-1356,664,-56,-1244,672,56],"surface":"emissive","color":[255,214,150]},{"box":[-1356,664,1244,-1244,672,1356],"surface":"emissive","color":[255,214,150]},{"box":[-56,664,-1356,56,672,-1244],"surface":"emissive","color":[255,214,150]},{"box":[-56,664,-56,56,672,56],"surface":"emissive","color":[255,214,150]},{"box":[-56,664,1244,56,672,1356],"surface":"emissive","color":[255,214,150]},{"box":[1244,664,-1356,1356,672,-1244],"surface":"emissive","color":[255,214,150]},{"box":[1244,664,-56,1356,672,56],"surface":"emissive","color":[255,214,150]},{"box":[1244,664,1244,1356,672,1356],"surface":"emissive","color":[255,214,150]},{"box":[1456,0.5,656,1544,3,744],"surface":"emissive","color":[40,190,255]},{"box":[1452,0.5,652,1548,4,658],"surface":"emissive","color":[190,235,255]},{"box":[1452,0.5,742,1548,4,748],"surface":"emissive","color":[190,235,255]},{"box":[1452,0.5,658,1458,4,742],"surface":"emissive","color":[190,235,255]},{"box":[1542,0.5,658,1548,4,742],"surface":"emissive","color":[190,235,255]},{"box":[-844,0.5,-44,-756,3,44],"surface":"emissive","color":[40,190,255]},{"box":[-848,0.5,-48,-752,4,-42],"surface":"emissive","color":[190,235,255]},{"box":[-848,0.5,42,-752,4,48],"surface":"emissive","color":[190,235,255]},{"box":[-848,0.5,-42,-842,4,42],"surface":"emissive","color":[190,235,255]},{"box":[-758,0.5,-42,-752,4,42],"surface":"emissive","color":[190,235,255]},{"box":[156,0.5,-1744,244,3,-1656],"surface":"emissive","color":[40,190,255]},{"box":[152,0.5,-1748,248,4,-1742],"surface":"emissive","color":[190,235,255]},{"box":[152,0.5,-1658,248,4,-1652],"surface":"emissive","color":[190,235,255]},{"box":[152,0.5,-1742,158,4,-1658],"surface":"emissive","color":[190,235,255]},{"box":[242,0.5,-1742,248,4,-1658],"surface":"emissive","color":[190,235,255]},{"box":[1906,128.5,-644,1994,131,-556],"surface":"emissive","color":[40,190,255]},{"box":[1902,128.5,-648,1998,132,-642],"surface":"emissive","color":[190,235,255]},{"box":[1902,128.5,-558,1998,132,-552],"surface":"emissive","color":[190,235,255]},{"box":[1902,128.5,-642,1908,132,-558],"surface":"emissive","color":[190,235,255]},{"box":[1992,128.5,-642,1998,132,-558],"surface":"emissive","color":[190,235,255]}],"lights":[{"pos":[-834.94617,300,-834.94617],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[834.94617,300,-834.94617],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[-834.94617,300,834.94617],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[834.94617,300,834.94617],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[-908,300,0],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[0,300,-908],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[0,300,908],"color":[1.9,0.95,0.38],"radius":760,"flicker":true},{"pos":[-1500,150,-1360],"color":[0.35,0.85,1.3],"radius":760},{"pos":[-1200,150,-1500],"color":[1.52,0.76,0.304],"radius":520,"flicker":true},{"pos":[1500,150,-1360],"color":[0.35,0.85,1.3],"radius":760},{"pos":[1200,150,-1500],"color":[1.52,0.76,0.304],"radius":520,"flicker":true},{"pos":[-1500,150,1640],"color":[0.35,0.85,1.3],"radius":760},{"pos":[-1200,150,1500],"color":[1.52,0.76,0.304],"radius":520,"flicker":true},{"pos":[1500,150,1640],"color":[0.35,0.85,1.3],"radius":760},{"pos":[1200,150,1500],"color":[1.52,0.76,0.304],"radius":520,"flicker":true},{"pos":[-340,215,-340],"color":[1.8,0.18,0.12],"radius":520,"flicker":true},{"pos":[340,215,-340],"color":[1.8,0.18,0.12],"radius":520,"flicker":true},{"pos":[-340,215,340],"color":[1.8,0.18,0.12],"radius":520,"flicker":true},{"pos":[340,215,340],"color":[1.8,0.18,0.12],"radius":520,"flicker":true},{"pos":[1985,250,-420],"color":[1.9,0.95,0.38],"radius":700,"flicker":true},{"pos":[1985,250,420],"color":[1.9,0.95,0.38],"radius":700,"flicker":true},{"pos":[-1200,230,-1978],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[-1200,230,1978],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[-1978,230,-1200],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[1978,230,-1200],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[0,230,-1978],"color":[1.615,0.8075,0.323],"radius":800,"flicker":true},{"pos":[0,230,1978],"color":[1.615,0.8075,0.323],"radius":800,"flicker":true},{"pos":[-1978,230,0],"color":[1.615,0.8075,0.323],"radius":800,"flicker":true},{"pos":[1978,230,0],"color":[1.615,0.8075,0.323],"radius":800,"flicker":true},{"pos":[1200,230,-1978],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[1200,230,1978],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[-1978,230,1200],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[1978,230,1200],"color":[1.615,0.8075,0.323],"radius":800},{"pos":[-1300,638,-1300],"color":[1,0.82,0.6],"radius":1500},{"pos":[-1300,638,0],"color":[1,0.82,0.6],"radius":1500},{"pos":[-1300,638,1300],"color":[1,0.82,0.6],"radius":1500},{"pos":[0,638,-1300],"color":[1,0.82,0.6],"radius":1500},{"pos":[0,638,0],"color":[1,0.82,0.6],"radius":1500},{"pos":[0,638,1300],"color":[1,0.82,0.6],"radius":1500},{"pos":[1300,638,-1300],"color":[1,0.82,0.6],"radius":1500},{"pos":[1300,638,0],"color":[1,0.82,0.6],"radius":1500},{"pos":[1300,638,1300],"color":[1,0.82,0.6],"radius":1500},{"pos":[1500,70,700],"color":[0.25,0.85,1.5],"radius":480},{"pos":[-800,70,0],"color":[0.25,0.85,1.5],"radius":480},{"pos":[200,70,-1700],"color":[0.25,0.85,1.5],"radius":480},{"pos":[1950,198,-600],"color":[0.25,0.85,1.5],"radius":480}],"pickups":[{"kind":"weapon","weapon":"SuperShotgun","amount":0,"pos":[0,144,0]},{"kind":"weapon","weapon":"Nailgun","amount":0,"pos":[-1600,16,-1500]},{"kind":"weapon","weapon":"SuperNailgun","amount":0,"pos":[1600,16,-1500]},{"kind":"weapon","weapon":"GrenadeLauncher","amount":0,"pos":[-1600,16,1500]},{"kind":"weapon","weapon":"RocketLauncher","amount":0,"pos":[1950,144,0]},{"kind":"weapon","weapon":"LightningGun","amount":0,"pos":[1600,16,1350]},{"kind":"weapon","weapon":"Railgun","amount":0,"pos":[1950,144,-820]},{"kind":"health","amount":25,"pos":[200,144,200]},{"kind":"health","amount":25,"pos":[-200,144,-200]},{"kind":"health","amount":25,"pos":[1600,16,1500]},{"kind":"health","amount":25,"pos":[0,16,-1300]},{"kind":"health","amount":25,"pos":[0,16,1300]},{"kind":"health","amount":25,"pos":[-1300,16,300]},{"kind":"health","amount":25,"pos":[1300,16,-300]},{"kind":"shells","amount":20,"pos":[-800,16,-900]},{"kind":"shells","amount":20,"pos":[800,16,900]},{"kind":"nails","amount":50,"pos":[800,16,-900]},{"kind":"nails","amount":50,"pos":[-800,16,900]},{"kind":"rockets","amount":5,"pos":[900,16,-780]},{"kind":"rockets","amount":5,"pos":[-900,16,780]},{"kind":"rockets","amount":5,"pos":[1950,144,300]},{"kind":"cells","amount":60,"pos":[-1300,16,-300]},{"kind":"cells","amount":60,"pos":[1300,16,300]},{"kind":"slugs","amount":10,"pos":[-1100,16,250]},{"kind":"slugs","amount":10,"pos":[1100,16,-250]}],"pads":[{"trigger":[1452,0,652,1548,40,748],"target":[1850,260,700]},{"trigger":[-848,0,-48,-752,40,48],"target":[-250,330,0]},{"trigger":[152,0,-1748,248,40,-1652],"target":[200,420,-700]},{"trigger":[1902,128,-648,1998,168,-552],"target":[1500,300,-600]}],"spawns":[[-1900,28,-1900],[1900,28,1900],[1900,28,-1900],[-1900,28,1900],[0,28,-1800],[0,28,1800],[-1800,28,0],[1900,156,0],[-1500,28,-1380],[1500,28,1380]],"dummies":[[-600,28,-900],[600,28,900],[0,156,0]]};
+
+/* ---------------------------------------------------------------- constants */
+const PICKUP_KINDS = [
+  ["health", "Health"], ["shells", "Shells"], ["nails", "Nails"], ["rockets", "Rockets"], ["cells", "Cells"], ["slugs", "Slugs"],
+  ["weapon:Shotgun", "Shotgun"], ["weapon:SuperShotgun", "Super Shotgun"], ["weapon:Nailgun", "Nailgun"], ["weapon:SuperNailgun", "Super Nailgun"],
+  ["weapon:GrenadeLauncher", "Grenade Launcher"], ["weapon:RocketLauncher", "Rocket Launcher"], ["weapon:LightningGun", "Lightning Gun"], ["weapon:Railgun", "Railgun"],
+];
+const WEAPONS = ["Axe", "Shotgun", "SuperShotgun", "Nailgun", "SuperNailgun", "GrenadeLauncher", "RocketLauncher", "LightningGun", "Railgun"];
+const DEFAULT_AMOUNT = { health: 25, shells: 20, nails: 50, rockets: 5, cells: 60, slugs: 10, weapon: 0 };
+const PICK_COLOR = { health: "#3cb45a", shells: "#e08a1e", nails: "#a8a8b8", rockets: "#d64a3e", cells: "#3a86ff", slugs: "#3cd6c0", weapon: "#f2cf3a" };
+const PICK_LABEL = { health: "H", shells: "Sh", nails: "Na", rockets: "Ro", cells: "Ce", slugs: "Sl" };
+const WEAPON_LABEL = { Shotgun: "SG", SuperShotgun: "SSG", Nailgun: "NG", SuperNailgun: "SNG", GrenadeLauncher: "GL", RocketLauncher: "RL", LightningGun: "LG", Railgun: "RG", Axe: "Ax" };
+const SURFACES = ["floor", "wall", "metal", "flat", "ceiling", "emissive"];
+const HULL = [16, 28, 16], PICK_HALF = [16, 16, 16], FLAG_HALF = [24, 40, 24];
+const STORE_KEY = "qnova-map-editor-v1";
+
+/* ---------------------------------------------------------------- state */
+let map = null;
+let sel = null;                       // {type, i}
+let tool = "select";
+let undoStack = [], redoStack = [];
+let view = "top";
+const cam = { x: 0, z: 0, zoom: 0.2 };
+const orb = { yaw: 0.8, pitch: 0.7, dist: 4200 };
+const $ = id => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+
+/* ---------------------------------------------------------------- map helpers */
+function emptyMap(half = 1024, height = 512) {
+  const m = { name: "New map", seed: 0, half, height, redFlag: null, blueFlag: null, solids: [], decor: [], lights: [], pickups: [], pads: [], spawns: [], dummies: [] };
+  addShell(m);
+  const s = half - 200;
+  m.spawns.push([-s, 28, -s], [s, 28, s], [s, 28, -s], [-s, 28, s]);
+  const q = half / 2;                                     // a few ceiling lamps so the room isn't pitch black
+  for (const [x, z] of [[-q, -q], [q, -q], [-q, q], [q, q]]) m.lights.push({ pos: [x, height - 100, z], color: [1, .82, .6], radius: half * 1.3, flicker: false });
+  return m;
+}
+function addShell(m) {
+  const h = m.half, t = m.height;
+  m.solids.push([-h, -64, -h, h, 0, h], [-h, t, -h, h, t + 64, h],
+    [-h - 64, -64, -h, -h, t + 64, h], [h, -64, -h, h + 64, t + 64, h],
+    [-h, -64, -h - 64, h, t + 64, -h], [-h, -64, h, h, t + 64, h + 64]);
+}
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function isShell(b) {
+  const h = map.half;
+  if (b[1] >= map.height - 1) return true;                      // ceiling plate
+  if (b[0] < -h + 1 && b[3] <= -h + 1) return true;             // outer walls (outside or flush)
+  if (b[3] > h - 1 && b[0] >= h - 1) return true;
+  if (b[2] < -h + 1 && b[5] <= -h + 1) return true;
+  if (b[5] > h - 1 && b[2] >= h - 1) return true;
+  return (b[3] - b[0]) * (b[5] - b[2]) > 0.8 * 4 * h * h && b[4] <= 1;   // the floor slab
+}
+function groundAt(x, z, ignore) {
+  let g = 0;
+  map.solids.forEach((b, i) => {
+    if (i === ignore || b[1] >= map.height - 1) return;
+    if (x >= b[0] && x <= b[3] && z >= b[2] && z <= b[5] && b[4] <= map.height - 40 && b[4] > g) g = b[4];
+  });
+  return g;
+}
+const snapV = v => { const s = +$("snap").value; return Math.round(v / s) * s; };
+const r3 = v => Math.round(v * 1000) / 1000;
+
+/* ---------------------------------------------------------------- persistence */
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch (e) {} }
+function load() { try { const s = localStorage.getItem(STORE_KEY); if (s) return JSON.parse(s); } catch (e) {} return null; }
+
+function pushUndo() { undoStack.push(JSON.stringify(map)); if (undoStack.length > 200) undoStack.shift(); redoStack = []; updateUndoButtons(); }
+function undo() { if (!undoStack.length) return; redoStack.push(JSON.stringify(map)); map = JSON.parse(undoStack.pop()); afterEdit(true); }
+function redo() { if (!redoStack.length) return; undoStack.push(JSON.stringify(map)); map = JSON.parse(redoStack.pop()); afterEdit(true); }
+function updateUndoButtons() { $("btnUndo").disabled = !undoStack.length; $("btnRedo").disabled = !redoStack.length; }
+function afterEdit(clearSel) {
+  if (clearSel || !sel || !getSel()) sel = null;
+  save(); updateUndoButtons(); buildSide(); draw();
+}
+
+/* ---------------------------------------------------------------- import / export */
+function normBox(b, at) {
+  if (!Array.isArray(b) || b.length !== 6 || b.some(n => typeof n !== "number")) throw new Error(at + ": expected 6 numbers");
+  const r = [Math.min(b[0], b[3]), Math.min(b[1], b[4]), Math.min(b[2], b[5]), Math.max(b[0], b[3]), Math.max(b[1], b[4]), Math.max(b[2], b[5])];
+  if (r[3] - r[0] < .01 || r[4] - r[1] < .01 || r[5] - r[2] < .01) throw new Error(at + ": box has no volume");
+  return r;
+}
+function normVec(v, at) {
+  if (!Array.isArray(v) || v.length !== 3 || v.some(n => typeof n !== "number")) throw new Error(at + ": expected 3 numbers");
+  return v.slice();
+}
+function parseMap(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { throw new Error("not valid JSON: " + e.message); }
+  if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("top level must be an object");
+  if (o.format !== 1) throw new Error("unsupported map format " + o.format + " (expected 1)");
+  const m = { name: typeof o.name === "string" ? o.name : "Imported map", seed: o.seed | 0, half: +o.half || 2048, height: +o.height || 768,
+    redFlag: null, blueFlag: null, solids: [], decor: [], lights: [], pickups: [], pads: [], spawns: [], dummies: [] };
+  (o.solids || []).forEach((b, i) => m.solids.push(normBox(b, `solids[${i}]`)));
+  (o.decor || []).forEach((d, i) => {
+    const e = { box: normBox(d.box, `decor[${i}].box`), surface: SURFACES.includes(d.surface) ? d.surface : "flat" };
+    if (d.color) e.color = normVec(d.color, `decor[${i}].color`);
+    m.decor.push(e);
+  });
+  (o.lights || []).forEach((l, i) => m.lights.push({ pos: normVec(l.pos, `lights[${i}].pos`), color: l.color ? normVec(l.color, `lights[${i}].color`) : [1, 1, 1], radius: +l.radius || 600, flicker: !!l.flicker }));
+  (o.pickups || []).forEach((k, i) => {
+    const kind = String(k.kind || "").toLowerCase();
+    if (!DEFAULT_AMOUNT.hasOwnProperty(kind)) throw new Error(`pickups[${i}]: unknown kind "${k.kind}"`);
+    const e = { kind, amount: k.amount > 0 ? k.amount | 0 : DEFAULT_AMOUNT[kind], pos: normVec(k.pos, `pickups[${i}].pos`) };
+    if (kind === "weapon") {
+      const w = WEAPONS.find(x => x.toLowerCase() === String(k.weapon || "").toLowerCase());
+      if (!w) throw new Error(`pickups[${i}]: unknown weapon "${k.weapon}"`);
+      e.weapon = w;
+    }
+    m.pickups.push(e);
+  });
+  (o.pads || []).forEach((p, i) => m.pads.push({ trigger: normBox(p.trigger, `pads[${i}].trigger`), target: normVec(p.target, `pads[${i}].target`) }));
+  (o.spawns || []).forEach((s, i) => m.spawns.push(normVec(s, `spawns[${i}]`)));
+  (o.dummies || []).forEach((s, i) => m.dummies.push(normVec(s, `dummies[${i}]`)));
+  if (o.redFlag) m.redFlag = normVec(o.redFlag, "redFlag");
+  if (o.blueFlag) m.blueFlag = normVec(o.blueFlag, "blueFlag");
+  if (!m.solids.length) throw new Error("map has no solids");
+  if (!m.spawns.length) throw new Error("map has no spawn points");
+  return m;
+}
+function serialize(m) {
+  const a = v => "[" + v.map(r3).join(",") + "]";
+  const list = (name, items, f) => `  "${name}": [` + (items.length ? "\n" + items.map(x => "    " + f(x)).join(",\n") + "\n  " : "") + "]";
+  const parts = [
+    `  "format": 1`, `  "name": ${JSON.stringify(m.name)}`, `  "seed": ${m.seed | 0}`, `  "half": ${r3(m.half)}`, `  "height": ${r3(m.height)}`,
+    `  "playerSpawn": ${a(m.spawns[0] || [0, 28, 0])}`,
+  ];
+  if (m.redFlag && m.blueFlag) { parts.push(`  "redFlag": ${a(m.redFlag)}`, `  "blueFlag": ${a(m.blueFlag)}`); }
+  parts.push(list("solids", m.solids, a));
+  parts.push(list("decor", m.decor, d => `{"box":${a(d.box)},"surface":"${d.surface}"${d.color ? `,"color":${a(d.color)}` : ""}}`));
+  parts.push(list("lights", m.lights, l => `{"pos":${a(l.pos)},"color":${a(l.color)},"radius":${r3(l.radius)}${l.flicker ? ',"flicker":true' : ""}}`));
+  parts.push(list("pickups", m.pickups, k => `{"kind":"${k.kind}"${k.weapon ? `,"weapon":"${k.weapon}"` : ""},"amount":${k.amount | 0},"pos":${a(k.pos)}}`));
+  parts.push(list("pads", m.pads, p => `{"trigger":${a(p.trigger)},"target":${a(p.target)}}`));
+  parts.push(list("spawns", m.spawns, a));
+  parts.push(list("dummies", m.dummies, a));
+  return "{\n" + parts.join(",\n") + "\n}\n";
+}
+function setStatus(msg, bad) { const s = $("status"); s.textContent = msg; s.className = bad ? "bad" : ""; }
+
+/* ---------------------------------------------------------------- dialog (import / export) */
+function openDialog(title, help, text, actions) {
+  $("dlgTitle").textContent = title; $("dlgHelp").textContent = help; $("dlgText").value = text;
+  const box = $("dlgActions"); box.textContent = "";
+  actions.forEach(([label, fn, cls]) => {
+    const b = document.createElement("button"); b.textContent = label; if (cls) b.className = cls;
+    b.onclick = fn; box.appendChild(b);
+  });
+  const d = $("dlg"); if (!d.open) d.showModal();
+}
+function closeDialog() { if ($("dlg").open) $("dlg").close(); }
+function fileName() { return (map.name || "map").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") + ".json"; }
+function doExport() {
+  const text = serialize(map), errs = check().filter(x => x.level === "err").length;
+  openDialog("Export map", `Save as ${fileName()}, then in the game console run: map file <path>. ` + (errs ? `${errs} problem(s) found by the checker.` : ""), text, [
+    ["Copy", async () => {
+      try { await navigator.clipboard.writeText(text); setStatus("Copied JSON to clipboard"); }
+      catch (e) { $("dlgText").select(); setStatus("Select the text and copy it (clipboard blocked)", true); }
+    }, "primary"],
+    ["Download", () => {
+      try {
+        const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+        const a = document.createElement("a"); a.href = url; a.download = fileName(); document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000); setStatus("Download started (if nothing happened, use Copy)");
+      } catch (e) { setStatus("Download blocked, use Copy", true); }
+    }],
+    ["Close", closeDialog],
+  ]);
+}
+function doImport() {
+  openDialog("Import map", "Paste map JSON here, or choose a file. Importing replaces the current map (you can undo).", "", [
+    ["Load pasted JSON", () => loadText($("dlgText").value), "primary"],
+    ["Choose file…", () => $("fileIn").click()],
+    ["Close", closeDialog],
+  ]);
+}
+function loadText(text) {
+  try {
+    const m = parseMap(text);
+    pushUndo(); map = m; sel = null; closeDialog(); fitView(); afterEdit(true); setStatus(`Loaded “${m.name}”: ${m.solids.length} solids, ${m.pickups.length} pickups`);
+  } catch (e) { setStatus("Import failed: " + e.message, true); }
+}
+$("fileIn").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => loadText(String(r.result)); r.readAsText(f); e.target.value = "";
+});
+
+/* ---------------------------------------------------------------- checks (a light mirror of the game's `mapcheck`) */
+function boxOverlap(a, b) { return a[0] < b[3] && a[3] > b[0] && a[1] < b[4] && a[4] > b[1] && a[2] < b[5] && a[5] > b[2]; }
+function hullBox(p, h) { return [p[0] - h[0], p[1] - h[1], p[2] - h[2], p[0] + h[0], p[1] + h[1], p[2] + h[2]]; }
+function inSolid(p, h) { const hb = hullBox(p, h); return map.solids.some(b => boxOverlap(hb, b)); }
+function supported(p, h) {
+  const hb = hullBox(p, h), foot = hb[1];
+  return map.solids.some(b => b[3] > hb[0] && b[0] < hb[3] && b[5] > hb[2] && b[2] < hb[5] && b[4] <= foot + 0.5 && b[4] >= foot - 12);
+}
+function fmt(p) { return `(${p.map(v => Math.round(v)).join(" ")})`; }
+function check() {
+  const out = []; const add = (level, text, ref) => out.push({ level, text, ref });
+  if (map.spawns.length < 4) add("warn", `Only ${map.spawns.length} spawn point(s); 4+ recommended for bots`);
+  map.spawns.forEach((p, i) => {
+    if (inSolid(p, HULL)) add("err", `Spawn ${fmt(p)} is inside geometry`, { type: "spawn", i });
+    else if (!supported(p, HULL)) add("err", `Spawn ${fmt(p)} is not on the ground`, { type: "spawn", i });
+  });
+  map.pickups.forEach((k, i) => {
+    const name = k.kind === "weapon" ? k.weapon : k.kind;
+    if (inSolid(k.pos, PICK_HALF)) add("err", `${name} at ${fmt(k.pos)} is inside geometry`, { type: "pickup", i });
+    else if (!supported(k.pos, PICK_HALF)) add("err", `${name} at ${fmt(k.pos)} floats`, { type: "pickup", i });
+  });
+  map.dummies.forEach((p, i) => { if (inSolid(p, HULL)) add("err", `Dummy ${fmt(p)} is inside geometry`, { type: "dummy", i }); });
+  [["red", map.redFlag], ["blue", map.blueFlag]].forEach(([t, p]) => { if (p && inSolid(p, FLAG_HALF)) add("err", `${t} flag base is inside geometry`, { type: "flag", i: t }); });
+  if (!!map.redFlag !== !!map.blueFlag) add("err", "Only one flag base is set; place both or neither");
+  map.pads.forEach((p, i) => {
+    const t = p.target, c = [(p.trigger[0] + p.trigger[3]) / 2, p.trigger[1], (p.trigger[2] + p.trigger[5]) / 2];
+    if (Math.abs(t[0]) > map.half || Math.abs(t[2]) > map.half || t[1] > map.height - 56) add("err", `Pad at ${fmt(c)} aims outside the map or into the ceiling`, { type: "pad", i });
+    else if (inSolid(t, HULL)) add("err", `Pad at ${fmt(c)} aims into solid geometry`, { type: "pad", i });
+  });
+  const have = new Set(map.pickups.filter(k => k.kind === "weapon").map(k => k.weapon));
+  const missing = WEAPONS.filter(w => w !== "Axe" && w !== "Shotgun" && !have.has(w));
+  if (missing.length) add("warn", `No pickup for: ${missing.join(", ")}`);
+  if (!map.pickups.some(k => k.kind === "health")) add("warn", "No health pickups");
+  return out;
+}
+
+/* ---------------------------------------------------------------- selection helpers */
+function getSel() {
+  if (!sel) return null;
+  switch (sel.type) {
+    case "solid": return map.solids[sel.i] || null;
+    case "pickup": return map.pickups[sel.i] || null;
+    case "pad": return map.pads[sel.i] || null;
+    case "spawn": return map.spawns[sel.i] || null;
+    case "dummy": return map.dummies[sel.i] || null;
+    case "light": return map.lights[sel.i] || null;
+    case "flag": return sel.i === "red" ? map.redFlag : map.blueFlag;
+  }
+  return null;
+}
+function selPoint() {                 // the draggable point of a selection (x,z)
+  const s = getSel(); if (!s) return null;
+  switch (sel.type) {
+    case "pickup": case "light": return s.pos;
+    case "solid": case "pad": return null;
+    default: return s;
+  }
+}
+function removeSel() {
+  if (!sel) return; pushUndo();
+  const l = { solid: map.solids, pickup: map.pickups, pad: map.pads, spawn: map.spawns, dummy: map.dummies, light: map.lights }[sel.type];
+  if (l) l.splice(sel.i, 1); else if (sel.type === "flag") { if (sel.i === "red") map.redFlag = null; else map.blueFlag = null; }
+  sel = null; afterEdit(true);
+}
+function duplicateSel() {
+  if (!sel) return; const s = getSel(); if (!s) return; pushUndo(); const d = +$("snap").value * 2;
+  const shift = (a, dx, dz) => a.length === 6 ? [a[0] + dx, a[1], a[2] + dz, a[3] + dx, a[4], a[5] + dz] : [a[0] + dx, a[1], a[2] + dz];
+  if (sel.type === "solid") { map.solids.push(shift(s, d, d)); sel = { type: "solid", i: map.solids.length - 1 }; }
+  else if (sel.type === "pickup") { map.pickups.push({ ...clone(s), pos: shift(s.pos, d, d) }); sel = { type: "pickup", i: map.pickups.length - 1 }; }
+  else if (sel.type === "pad") { map.pads.push({ trigger: shift(s.trigger, d, d), target: shift(s.target, d, d) }); sel = { type: "pad", i: map.pads.length - 1 }; }
+  else if (sel.type === "spawn") { map.spawns.push(shift(s, d, d)); sel = { type: "spawn", i: map.spawns.length - 1 }; }
+  else if (sel.type === "dummy") { map.dummies.push(shift(s, d, d)); sel = { type: "dummy", i: map.dummies.length - 1 }; }
+  else if (sel.type === "light") { map.lights.push({ ...clone(s), pos: shift(s.pos, d, d) }); sel = { type: "light", i: map.lights.length - 1 }; }
+  afterEdit(false);
+}
+function nudge(dx, dz) {
+  const s = getSel(); if (!s) return; pushUndo();
+  const mv = (a) => { if (a.length === 6) { a[0] += dx; a[3] += dx; a[2] += dz; a[5] += dz; } else { a[0] += dx; a[2] += dz; } };
+  if (sel.type === "pad") { mv(s.trigger); mv(s.target); }
+  else if (sel.type === "pickup" || sel.type === "light") mv(s.pos); else mv(s);
+  afterEdit(false);
+}
+
+/* ---------------------------------------------------------------- coordinates */
+const toSX = x => (x - cam.x) * cam.zoom + W / 2;
+const toSY = z => (z - cam.z) * cam.zoom + H / 2;
+const toWX = sx => (sx - W / 2) / cam.zoom + cam.x;
+const toWZ = sy => (sy - H / 2) / cam.zoom + cam.z;
+function fitView() {
+  const size = Math.max(200, Math.min(W, H)) - 40;
+  cam.zoom = size / (map.half * 2.15); cam.x = 0; cam.z = 0;
+  orb.dist = map.half * 3.3; orb.pitch = 0.6;
+}
+
+/* ---------------------------------------------------------------- hit testing (top view) */
+function hitTest(sx, sy) {
+  const near = (p, r) => Math.abs(toSX(p[0]) - sx) <= r && Math.abs(toSY(p[2]) - sy) <= r;
+  for (let i = map.pads.length - 1; i >= 0; i--) if (near(map.pads[i].target, 9)) return { type: "padTarget", i };
+  for (let i = map.pickups.length - 1; i >= 0; i--) if (near(map.pickups[i].pos, 10)) return { type: "pickup", i };
+  for (let i = map.spawns.length - 1; i >= 0; i--) if (near(map.spawns[i], 9)) return { type: "spawn", i };
+  for (let i = map.dummies.length - 1; i >= 0; i--) if (near(map.dummies[i], 9)) return { type: "dummy", i };
+  if (map.redFlag && near(map.redFlag, 11)) return { type: "flag", i: "red" };
+  if (map.blueFlag && near(map.blueFlag, 11)) return { type: "flag", i: "blue" };
+  for (let i = map.lights.length - 1; i >= 0; i--) if (near(map.lights[i].pos, 8)) return { type: "light", i };
+  const wx = toWX(sx), wz = toWZ(sy);
+  for (let i = map.pads.length - 1; i >= 0; i--) { const t = map.pads[i].trigger; if (wx >= t[0] && wx <= t[3] && wz >= t[2] && wz <= t[5]) return { type: "pad", i }; }
+  let best = -1, bestTop = -Infinity, bestArea = Infinity;
+  map.solids.forEach((b, i) => {
+    if ($("lockShell").checked && isShell(b)) return;
+    if (wx < b[0] || wx > b[3] || wz < b[2] || wz > b[5]) return;
+    const area = (b[3] - b[0]) * (b[5] - b[2]);
+    if (b[4] > bestTop || (b[4] === bestTop && area < bestArea)) { best = i; bestTop = b[4]; bestArea = area; }
+  });
+  return best >= 0 ? { type: "solid", i: best } : null;
+}
+function handleAt(sx, sy) {           // corner handles of a selected solid / pad trigger
+  if (!sel || (sel.type !== "solid" && sel.type !== "pad")) return null;
+  const b = sel.type === "solid" ? getSel() : getSel().trigger;
+  const corners = [[b[0], b[2], 0], [b[3], b[2], 1], [b[0], b[5], 2], [b[3], b[5], 3]];
+  for (const [x, z, k] of corners) if (Math.abs(toSX(x) - sx) <= 8 && Math.abs(toSY(z) - sy) <= 8) return k;
+  return null;
+}
+
+/* ---------------------------------------------------------------- drawing: shared */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function mix(c1, c2, t) {
+  const p = c => { const s = c.replace("#", ""); const f = s.length === 3 ? s.split("").map(x => x + x).join("") : s; return [0, 2, 4].map(i => parseInt(f.substr(i, 2), 16)); };
+  const a = p(c1), b = p(c2); return "rgb(" + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(",") + ")";
+}
+function pickInfo(k) {
+  if (k.kind === "weapon") return [PICK_COLOR.weapon, WEAPON_LABEL[k.weapon] || "W"];
+  return [PICK_COLOR[k.kind], PICK_LABEL[k.kind]];
+}
+function resize() {
+  const r = $("stage").getBoundingClientRect(); DPR = window.devicePixelRatio || 1;
+  W = Math.max(1, r.width); H = Math.max(1, r.height);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); draw();
+}
+function draw() { if (!map) return; if (view === "top") drawTop(); else draw3D(); }
+
+/* ---------------------------------------------------------------- drawing: top view */
+function drawTop() {
+  const C = { canvas: css("--canvas"), grid: css("--grid"), grid2: css("--grid2"), low: css("--low"), high: css("--high"), shell: css("--shell"),
+    fg: css("--fg"), sel: css("--sel"), accent: css("--accent"), red: css("--red"), blue: css("--blue"), green: css("--green"), dim: css("--dim"), warn: css("--warn") };
+  ctx.fillStyle = C.canvas; ctx.fillRect(0, 0, W, H);
+
+  // grid
+  let step = +$("snap").value; while (step * cam.zoom < 10) step *= 2;
+  const x0 = Math.floor(toWX(0) / step) * step, x1 = toWX(W), z0 = Math.floor(toWZ(0) / step) * step, z1 = toWZ(H);
+  ctx.lineWidth = 1;
+  for (let x = x0; x <= x1; x += step) { ctx.strokeStyle = (x % (step * 4) === 0) ? C.grid2 : C.grid; ctx.beginPath(); ctx.moveTo(Math.round(toSX(x)) + .5, 0); ctx.lineTo(Math.round(toSX(x)) + .5, H); ctx.stroke(); }
+  for (let z = z0; z <= z1; z += step) { ctx.strokeStyle = (z % (step * 4) === 0) ? C.grid2 : C.grid; ctx.beginPath(); ctx.moveTo(0, Math.round(toSY(z)) + .5); ctx.lineTo(W, Math.round(toSY(z)) + .5); ctx.stroke(); }
+
+  // solids, low to high
+  const order = map.solids.map((b, i) => i).sort((a, b) => map.solids[a][4] - map.solids[b][4]);
+  ctx.font = "10px " + css("--mono");
+  for (const i of order) {
+    const b = map.solids[i]; if (b[1] >= map.height - 1) continue;
+    const shell = isShell(b);
+    const x = toSX(b[0]), y = toSY(b[2]), w = (b[3] - b[0]) * cam.zoom, h = (b[5] - b[2]) * cam.zoom;
+    if (x > W || y > H || x + w < 0 || y + h < 0) continue;
+    if (shell && b[4] <= 1) { ctx.fillStyle = mix(C.canvas, C.low, .18); ctx.fillRect(x, y, w, h); continue; }
+    const t = Math.min(1, Math.max(0, b[4] / Math.max(1, map.height * 0.5)));
+    ctx.fillStyle = shell ? C.shell : mix(C.low, C.high, t);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = shell ? C.grid2 : mix(C.low, C.fg, .55); ctx.lineWidth = 1;
+    if (b[1] > 1) ctx.setLineDash([4, 3]);
+    ctx.strokeRect(Math.round(x) + .5, Math.round(y) + .5, Math.round(w), Math.round(h)); ctx.setLineDash([]);
+    if (w > 34 && h > 14 && !shell) { ctx.fillStyle = mix(C.canvas, C.fg, .8); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(Math.round(b[4]), x + w / 2, y + h / 2); }
+  }
+  // interior outline
+  ctx.strokeStyle = C.dim; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+  ctx.strokeRect(toSX(-map.half) + .5, toSY(-map.half) + .5, map.half * 2 * cam.zoom, map.half * 2 * cam.zoom); ctx.setLineDash([]);
+
+  if ($("showDecor").checked) {
+    ctx.strokeStyle = mix(C.canvas, C.accent, .45); ctx.lineWidth = 1;
+    for (const d of map.decor) { const b = d.box; ctx.strokeRect(toSX(b[0]), toSY(b[2]), (b[3] - b[0]) * cam.zoom, (b[5] - b[2]) * cam.zoom); }
+  }
+
+  // lights
+  for (const l of map.lights) {
+    const x = toSX(l.pos[0]), y = toSY(l.pos[2]), col = "rgb(" + l.color.map(v => Math.round(Math.min(1, v) * 255)).join(",") + ")";
+    if (sel && sel.type === "light" && map.lights[sel.i] === l) { ctx.strokeStyle = mix(C.canvas, "#ffd36b", .5); ctx.beginPath(); ctx.arc(x, y, l.radius * cam.zoom, 0, 6.283); ctx.stroke(); }
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 4, 0, 6.283); ctx.fill();
+  }
+  // pads
+  for (const p of map.pads) {
+    const t = p.trigger, cx = toSX((t[0] + t[3]) / 2), cy = toSY((t[2] + t[5]) / 2), tx = toSX(p.target[0]), ty = toSY(p.target[2]);
+    ctx.fillStyle = mix(C.canvas, C.accent, .55); ctx.fillRect(toSX(t[0]), toSY(t[2]), (t[3] - t[0]) * cam.zoom, (t[5] - t[2]) * cam.zoom);
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.strokeRect(toSX(t[0]), toSY(t[2]), (t[3] - t[0]) * cam.zoom, (t[5] - t[2]) * cam.zoom);
+    ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(tx, ty - 7); ctx.lineTo(tx + 7, ty); ctx.lineTo(tx, ty + 7); ctx.lineTo(tx - 7, ty); ctx.closePath(); ctx.fillStyle = C.canvas; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = C.accent; ctx.font = "9px " + css("--mono"); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(Math.round(p.target[1]), tx, ty);
+  }
+  // spawns, dummies
+  map.spawns.forEach((p, i) => {
+    const x = toSX(p[0]), y = toSY(p[2]);
+    ctx.fillStyle = C.green; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y + 6); ctx.lineTo(x - 7, y + 6); ctx.closePath(); ctx.fill();
+    if (i === 0) { ctx.strokeStyle = C.fg; ctx.lineWidth = 1.5; ctx.stroke(); }
+  });
+  for (const p of map.dummies) { const x = toSX(p[0]), y = toSY(p[2]); ctx.fillStyle = C.sel; ctx.fillRect(x - 6, y - 6, 12, 12); }
+  // pickups
+  ctx.font = "bold 9px " + css("--mono"); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const k of map.pickups) {
+    const [col, lab] = pickInfo(k), x = toSX(k.pos[0]), y = toSY(k.pos[2]);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = C.canvas; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = "#111"; ctx.fillText(lab, x, y + .5);
+  }
+  // flags
+  for (const [t, p, col] of [["R", map.redFlag, C.red], ["B", map.blueFlag, C.blue]]) {
+    if (!p) continue; const x = toSX(p[0]), y = toSY(p[2]);
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 12, 0, 6.283); ctx.stroke();
+    ctx.fillStyle = col; ctx.fillRect(x - 1, y - 11, 2, 22); ctx.fillRect(x + 1, y - 11, 10, 7);
+  }
+
+  // selection
+  if (sel) {
+    const s = getSel();
+    ctx.strokeStyle = C.sel; ctx.lineWidth = 2; ctx.setLineDash([]);
+    if (sel.type === "solid" || sel.type === "pad") {
+      const b = sel.type === "solid" ? s : s.trigger;
+      ctx.strokeRect(toSX(b[0]) - 1, toSY(b[2]) - 1, (b[3] - b[0]) * cam.zoom + 2, (b[5] - b[2]) * cam.zoom + 2);
+      ctx.fillStyle = C.canvas;
+      for (const [x, z] of [[b[0], b[2]], [b[3], b[2]], [b[0], b[5]], [b[3], b[5]]]) { ctx.fillRect(toSX(x) - 4, toSY(z) - 4, 8, 8); ctx.strokeRect(toSX(x) - 4, toSY(z) - 4, 8, 8); }
+    } else {
+      const p = sel.type === "pickup" || sel.type === "light" ? s.pos : s;
+      ctx.beginPath(); ctx.arc(toSX(p[0]), toSY(p[2]), 14, 0, 6.283); ctx.stroke();
+    }
+  }
+  if (drag && drag.mode === "create") {
+    const a = drag.a, b = drag.b;
+    ctx.strokeStyle = C.accent; ctx.fillStyle = mix(C.canvas, C.accent, .3); ctx.lineWidth = 1.5;
+    const x = toSX(Math.min(a[0], b[0])), y = toSY(Math.min(a[1], b[1])), w = Math.abs(a[0] - b[0]) * cam.zoom, h = Math.abs(a[1] - b[1]) * cam.zoom;
+    ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = C.fg; ctx.font = "11px " + css("--mono"); ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    ctx.fillText(`${Math.abs(a[0] - b[0])} × ${Math.abs(a[1] - b[1])}`, x + 4, y - 4);
+  }
+}
+
+/* ---------------------------------------------------------------- drawing: 3D preview (small painter's-algorithm renderer) */
+function draw3D() {
+  const bg = css("--canvas");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const cy = Math.cos(orb.yaw), sy = Math.sin(orb.yaw), cp = Math.cos(orb.pitch), sp = Math.sin(orb.pitch);
+  const tgt = [0, map.height * 0.25, 0];
+  const focal = Math.min(W, H) * 1.1;
+  function cam3(p) {                           // world -> camera space (x right, y up, z into screen)
+    let x = p[0] - tgt[0], y = p[1] - tgt[1], z = p[2] - tgt[2];
+    let x1 = x * cy - z * sy, z1 = x * sy + z * cy;
+    let y2 = y * cp + z1 * sp, z2 = -y * sp + z1 * cp;
+    return [x1, y2, z2 + orb.dist];
+  }
+  const proj = c => [W / 2 + c[0] / c[2] * focal, H / 2 - c[1] / c[2] * focal];
+  const L = [-0.45, 0.8, -0.35]; const ln = Math.hypot(...L); L[0] /= ln; L[1] /= ln; L[2] /= ln;
+  const polys = [];
+  const baseFloor = css("--low"), baseHigh = css("--high");
+  const faces = [ // [normal, corner indices into 8 verts]
+    [[0, 1, 0], [3, 2, 6, 7]], [[0, -1, 0], [0, 1, 5, 4]], [[1, 0, 0], [1, 2, 6, 5]], [[-1, 0, 0], [0, 3, 7, 4]], [[0, 0, 1], [4, 5, 6, 7]], [[0, 0, -1], [0, 1, 2, 3]],
+  ];
+  function addBox(b, color, opts = {}) {
+    const v = [[b[0], b[1], b[2]], [b[3], b[1], b[2]], [b[3], b[4], b[2]], [b[0], b[4], b[2]], [b[0], b[1], b[5]], [b[3], b[1], b[5]], [b[3], b[4], b[5]], [b[0], b[4], b[5]]];
+    const cv3 = v.map(cam3); if (cv3.every(c => c[2] < 10)) return;
+    for (const [n, idx] of faces) {
+      if (n[1] < 0) continue;
+      const pts = idx.map(i => cv3[i]); if (pts.some(c => c[2] < 10)) continue;
+      const lam = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+      const depth = idxDepth(pts);
+      polys.push({ layer: opts.layer || 1, pts: pts.map(proj), depth, fill: shade(color, 0.45 + 0.55 * lam), stroke: opts.stroke });
+    }
+  }
+  let color = "#888";
+  function idxDepth(p) { return (p[0][2] + p[1][2] + p[2][2] + p[3][2]) / 4; }
+  function shade(c, k) { const m = /rgb\((\d+),(\d+),(\d+)\)/.exec(c); if (!m) return c; return `rgb(${Math.round(m[1] * k)},${Math.round(m[2] * k)},${Math.round(m[3] * k)})`; }
+  const rgbOf = (c) => { const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c); return m ? `rgb(${m[1]},${m[2]},${m[3]})` : c; };
+  map.solids.forEach((b, i) => {
+    if (b[1] >= map.height - 1) return;
+    if (Math.abs(b[0]) > map.half + 1 || Math.abs(b[3]) > map.half + 1 || Math.abs(b[2]) > map.half + 1 || Math.abs(b[5]) > map.half + 1) return;
+    const t = Math.min(1, b[4] / (map.height * 0.5));
+    color = rgbOf(mix(baseFloor, baseHigh, t));
+    if (b[4] <= 1 && b[1] < 0) color = rgbOf(mix(css("--canvas"), baseFloor, .5));
+    addBox(b, color, { layer: b[4] <= 1 ? 0 : 1, stroke: sel && sel.type === "solid" && sel.i === i ? css("--sel") : null });
+  });
+  // markers as small boxes
+  const marker = (p, h, col) => { color = rgbOf(mix(col, "#000000", 0)); addBox([p[0] - h[0], p[1] - h[1], p[2] - h[2], p[0] + h[0], p[1] + h[1], p[2] + h[2]], color); };
+  const hexRgb = c => { const s = c.replace("#", ""); return `rgb(${parseInt(s.substr(0, 2), 16)},${parseInt(s.substr(2, 2), 16)},${parseInt(s.substr(4, 2), 16)})`; };
+  map.spawns.forEach(p => marker([p[0], p[1] - 28 + 14, p[2]], [10, 14, 10], hexRgb("#3cb45a")));
+  map.pickups.forEach(k => marker(k.pos, [9, 9, 9], hexRgb(k.kind === "weapon" ? PICK_COLOR.weapon : PICK_COLOR[k.kind])));
+  map.dummies.forEach(p => marker(p, [14, 28, 14], hexRgb("#e08a1e")));
+  map.pads.forEach(p => { color = rgbOf(css("--accent")); addBox([p.trigger[0], p.trigger[1], p.trigger[2], p.trigger[3], p.trigger[1] + 6, p.trigger[5]], color); });
+  if (map.redFlag) marker([map.redFlag[0], map.redFlag[1] + 40, map.redFlag[2]], [4, 80, 4], hexRgb("#d64a3e"));
+  if (map.blueFlag) marker([map.blueFlag[0], map.blueFlag[1] + 40, map.blueFlag[2]], [4, 80, 4], hexRgb("#3a6ee0"));
+  polys.sort((a, b) => a.layer - b.layer || b.depth - a.depth);
+  for (const p of polys) {
+    ctx.beginPath(); p.pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
+    ctx.fillStyle = p.fill; ctx.fill(); ctx.strokeStyle = p.stroke || "rgba(0,0,0,.35)"; ctx.lineWidth = p.stroke ? 2 : 1; ctx.stroke();
+  }
+}
+
+/* ---------------------------------------------------------------- pointer interaction */
+let drag = null, spaceDown = false;
+function pos(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function ptY(kind) { return { spawn: 28, pickup: 16, flag: 40, dummy: 28 }[kind]; }
+
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("pointerdown", e => {
+  cv.focus(); const [sx, sy] = pos(e);
+  cv.setPointerCapture(e.pointerId);
+  if (view === "3d") { drag = { mode: "orbit", sx, sy, yaw: orb.yaw, pitch: orb.pitch }; return; }
+  if (e.button === 1 || e.button === 2 || spaceDown) { drag = { mode: "pan", sx, sy, cx: cam.x, cz: cam.z }; return; }
+  if (e.button !== 0) return;
+  const wx = snapV(toWX(sx)), wz = snapV(toWZ(sy));
+
+  if (tool === "select") {
+    const h = handleAt(sx, sy);
+    if (h !== null) { pushUndo(); drag = { mode: "resize", h }; return; }
+    const hit = hitTest(sx, sy);
+    if (!hit) { sel = null; buildSide(); draw(); return; }
+    if (hit.type === "padTarget") { sel = { type: "pad", i: hit.i }; pushUndo(); drag = { mode: "target", last: [toWX(sx), toWZ(sy)] }; buildSide(); draw(); return; }
+    sel = hit; buildSide();
+    pushUndo(); drag = { mode: "move", last: [toWX(sx), toWZ(sy)], acc: [0, 0], moved: false };
+    draw(); return;
+  }
+  if (tool === "box") { drag = { mode: "create", a: [wx, wz], b: [wx, wz] }; return; }
+
+  // click-to-place tools
+  pushUndo();
+  const g = groundAt(wx, wz);
+  if (tool === "spawn") { map.spawns.push([wx, g + 28, wz]); sel = { type: "spawn", i: map.spawns.length - 1 }; }
+  else if (tool === "dummy") { map.dummies.push([wx, g + 28, wz]); sel = { type: "dummy", i: map.dummies.length - 1 }; }
+  else if (tool === "pickup") {
+    const [kind, w] = $("pickupKind").value.split(":"); const k = { kind, amount: DEFAULT_AMOUNT[kind], pos: [wx, g + 16, wz] };
+    if (kind === "weapon") k.weapon = w; map.pickups.push(k); sel = { type: "pickup", i: map.pickups.length - 1 };
+  }
+  else if (tool === "pad") { map.pads.push({ trigger: [wx - 48, g, wz - 48, wx + 48, g + 40, wz + 48], target: [wx + 400, g + 260, wz] }); sel = { type: "pad", i: map.pads.length - 1 }; }
+  else if (tool === "flagRed") { map.redFlag = [wx, g + 40, wz]; sel = { type: "flag", i: "red" }; }
+  else if (tool === "flagBlue") { map.blueFlag = [wx, g + 40, wz]; sel = { type: "flag", i: "blue" }; }
+  else if (tool === "light") { map.lights.push({ pos: [wx, Math.min(map.height - 100, g + 200), wz], color: [1, .82, .6], radius: 700, flicker: false }); sel = { type: "light", i: map.lights.length - 1 }; }
+  afterEdit(false);
+});
+cv.addEventListener("pointermove", e => {
+  const [sx, sy] = pos(e);
+  if (view === "top") $("cursor").textContent = `x ${snapV(toWX(sx))}  z ${snapV(toWZ(sy))}  ground ${groundAt(toWX(sx), toWZ(sy))}`;
+  if (!drag) { if (view === "top" && tool === "select") cv.style.cursor = handleAt(sx, sy) !== null ? "nwse-resize" : hitTest(sx, sy) ? "move" : "default"; else cv.style.cursor = view === "top" && tool !== "select" ? "crosshair" : "default"; return; }
+  if (drag.mode === "orbit") { orb.yaw = drag.yaw - (sx - drag.sx) * 0.008; orb.pitch = Math.max(0.05, Math.min(1.5, drag.pitch + (sy - drag.sy) * 0.008)); draw(); return; }
+  if (drag.mode === "pan") { cam.x = drag.cx - (sx - drag.sx) / cam.zoom; cam.z = drag.cz - (sy - drag.sy) / cam.zoom; draw(); return; }
+  if (drag.mode === "create") { drag.b = [snapV(toWX(sx)), snapV(toWZ(sy))]; draw(); return; }
+  if (drag.mode === "move") {
+    const cx = toWX(sx), cz = toWZ(sy);
+    drag.acc[0] += cx - drag.last[0]; drag.acc[1] += cz - drag.last[1]; drag.last = [cx, cz];
+    const s = +$("snap").value, dx = Math.round(drag.acc[0] / s) * s, dz = Math.round(drag.acc[1] / s) * s;
+    if (dx || dz) { moveSel(dx, dz); drag.acc[0] -= dx; drag.acc[1] -= dz; drag.moved = true; buildSideValues(); draw(); }
+    return;
+  }
+  if (drag.mode === "target") { const p = getSel().target; p[0] = snapV(toWX(sx)); p[2] = snapV(toWZ(sy)); buildSideValues(); draw(); return; }
+  if (drag.mode === "resize") {
+    const b = sel.type === "solid" ? getSel() : getSel().trigger, wx = snapV(toWX(sx)), wz = snapV(toWZ(sy));
+    const xi = drag.h & 1 ? 3 : 0, zi = drag.h & 2 ? 5 : 2;
+    const ox = xi === 3 ? 0 : 3, oz = zi === 5 ? 2 : 5;
+    if (Math.abs(wx - b[ox]) >= 1) b[xi] = wx; if (Math.abs(wz - b[oz]) >= 1) b[zi] = wz;
+    if (b[0] > b[3]) { [b[0], b[3]] = [b[3], b[0]]; drag.h ^= 1; } if (b[2] > b[5]) { [b[2], b[5]] = [b[5], b[2]]; drag.h ^= 2; }
+    buildSideValues(); draw();
+  }
+});
+function moveSel(dx, dz) {
+  const s = getSel(); const mv = a => { if (a.length === 6) { a[0] += dx; a[3] += dx; a[2] += dz; a[5] += dz; } else { a[0] += dx; a[2] += dz; } };
+  if (sel.type === "pad") { mv(s.trigger); mv(s.target); } else if (sel.type === "pickup" || sel.type === "light") mv(s.pos); else mv(s);
+}
+cv.addEventListener("pointerup", e => {
+  if (!drag) return;
+  if (drag.mode === "create") {
+    const [a, b] = [drag.a, drag.b]; const s = +$("snap").value;
+    if (Math.abs(a[0] - b[0]) >= s && Math.abs(a[1] - b[1]) >= s) {
+      let y0 = +$("brushY0").value || 0, y1 = +$("brushY1").value || 0; if (y1 < y0) [y0, y1] = [y1, y0]; if (y1 - y0 < 1) y1 = y0 + 16;
+      pushUndo(); map.solids.push([Math.min(a[0], b[0]), y0, Math.min(a[1], b[1]), Math.max(a[0], b[0]), y1, Math.max(a[1], b[1])]);
+      sel = { type: "solid", i: map.solids.length - 1 };
+    }
+    drag = null; afterEdit(false); return;
+  }
+  const changed = drag.mode === "move" ? drag.moved : (drag.mode === "resize" || drag.mode === "target");
+  if (drag.mode === "move" && !drag.moved) undoStack.pop();        // a plain click is not an edit
+  drag = null; if (changed) afterEdit(false); else { updateUndoButtons(); draw(); }
+});
+cv.addEventListener("wheel", e => {
+  e.preventDefault(); const [sx, sy] = pos(e), f = Math.exp(-e.deltaY * 0.0015);
+  if (view === "3d") { orb.dist = Math.max(300, Math.min(20000, orb.dist / f)); draw(); return; }
+  const wx = toWX(sx), wz = toWZ(sy); cam.zoom = Math.max(0.03, Math.min(4, cam.zoom * f));
+  cam.x = wx - (sx - W / 2) / cam.zoom; cam.z = wz - (sy - H / 2) / cam.zoom; draw();
+}, { passive: false });
+
+/* ---------------------------------------------------------------- keyboard */
+const TOOL_KEYS = { v: "select", b: "box", s: "spawn", p: "pickup", j: "pad", r: "flagRed", f: "flagBlue", d: "dummy", l: "light" };
+function setTool(t) {
+  tool = t; document.querySelectorAll(".tool").forEach(b => b.classList.toggle("active", b.dataset.tool === t));
+  $("hint").textContent = t === "select" ? "click: select · drag: move · corners: resize · Del: delete · wheel: zoom · right-drag / Space-drag: pan"
+    : t === "box" ? "drag out a footprint · height comes from Base Y / Top Y" : "click to place · height snaps to the floor below";
+}
+document.querySelectorAll(".tool").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
+addEventListener("keydown", e => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (e.key === " " && tag !== "input" && tag !== "textarea" && tag !== "select" && tag !== "button") { spaceDown = true; e.preventDefault(); }
+  if (tag === "input" || tag === "textarea" || tag === "select" || $("dlg").open) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+  if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSel(); return; }
+  if (mod) return;
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSel(); return; }
+  if (e.key === "Escape") { sel = null; setTool("select"); buildSide(); draw(); return; }
+  const s = +$("snap").value, arrows = { ArrowLeft: [-s, 0], ArrowRight: [s, 0], ArrowUp: [0, -s], ArrowDown: [0, s] };
+  if (arrows[e.key]) { e.preventDefault(); nudge(...arrows[e.key]); return; }
+  if (TOOL_KEYS[e.key.toLowerCase()]) setTool(TOOL_KEYS[e.key.toLowerCase()]);
+});
+addEventListener("keyup", e => { if (e.key === " ") spaceDown = false; });
+
+/* ---------------------------------------------------------------- inspector */
+const side = $("side");
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); }
+  kids.forEach(c => e.append(c)); return e;
+}
+let numInputs = [];      // {input, get} refreshed while dragging
+function numField(get, set, step = 1) {
+  const i = el("input", { type: "number", step: String(step), "aria-label": "value" });
+  i.value = r3(get());
+  i.addEventListener("change", () => { const v = parseFloat(i.value); if (isNaN(v)) { i.value = r3(get()); return; } pushUndo(); set(v); afterEdit(false); });
+  numInputs.push({ i, get }); return i;
+}
+function vecRow(label, arr, offset = 0) {
+  const g = el("div", { class: "grid3" });
+  ["X", "Y", "Z"].forEach((n, k) => g.append(numField(() => arr[offset + k], v => { arr[offset + k] = v; })));
+  return el("div", {}, el("div", { class: "tiny" }, label), g, el("div", { class: "grid3" }, el("span", {}, "x"), el("span", {}, "y"), el("span", {}, "z")));
+}
+function boxRows(b) {
+  return [vecRow("Min corner", b, 0), vecRow("Max corner", b, 3)];
+}
+function fieldRow(label, node, id) { const r = el("div", { class: "row" }, el("label", id ? { for: id } : {}, label), node); return r; }
+function buildSideValues() { numInputs.forEach(n => { if (document.activeElement !== n.i) n.i.value = r3(n.get()); }); }
+
+function buildSide() {
+  side.textContent = ""; numInputs = [];
+  $("mapTitle").textContent = "· " + map.name;
+  // selection
+  side.append(el("h2", {}, "Selection"));
+  const s = getSel();
+  if (!s) side.append(el("p", { class: "tiny" }, "Nothing selected. Click something on the map, or pick a tool on the left."));
+  else {
+    const title = { solid: "Solid box", pickup: "Pickup", pad: "Jump pad", spawn: "Spawn point", dummy: "Target dummy", light: "Light", flag: sel.i === "red" ? "Red flag base" : "Blue flag base" }[sel.type];
+    side.append(el("div", { style: "font-weight:600;margin-bottom:6px" }, title));
+    if (sel.type === "solid") {
+      boxRows(s).forEach(r => side.append(r));
+      side.append(el("div", { class: "tiny" }, `size ${r3(s[3] - s[0])} × ${r3(s[4] - s[1])} × ${r3(s[5] - s[2])}${isShell(s) ? " (shell)" : ""}`));
+    } else if (sel.type === "pickup") {
+      const sk = el("select", { id: "insKind" });
+      PICKUP_KINDS.forEach(([v, l]) => { const o = el("option", { value: v }, l); if (v === (s.kind === "weapon" ? "weapon:" + s.weapon : s.kind)) o.selected = true; sk.append(o); });
+      sk.addEventListener("change", () => { pushUndo(); const [kind, w] = sk.value.split(":"); s.kind = kind; if (kind === "weapon") s.weapon = w; else delete s.weapon; s.amount = DEFAULT_AMOUNT[kind]; afterEdit(false); });
+      side.append(fieldRow("Type", sk, "insKind"), fieldRow("Amount", numField(() => s.amount, v => { s.amount = Math.max(0, v | 0); })), vecRow("Position", s.pos));
+      side.append(el("div", { class: "tiny" }, "Amount 0 uses the game's default for that item."));
+    } else if (sel.type === "pad") {
+      boxRows(s.trigger).forEach((r, k) => { r.firstChild.textContent = k ? "Trigger max" : "Trigger min"; side.append(r); });
+      side.append(vecRow("Apex target (the arc's highest point)", s.target));
+      side.append(el("div", { class: "tiny" }, "Drag the diamond on the map to aim it."));
+    } else if (sel.type === "light") {
+      side.append(vecRow("Position", s.pos));
+      side.append(fieldRow("Radius", numField(() => s.radius, v => { s.radius = Math.max(50, v); }, 50)));
+      const g = el("div", { class: "grid3" }); [0, 1, 2].forEach(k => g.append(numField(() => s.color[k], v => { s.color[k] = Math.max(0, v); }, 0.1)));
+      side.append(el("div", { class: "tiny" }, "Colour (r, g, b; above 1 is brighter)"), g);
+      const fl = el("input", { type: "checkbox", id: "insFlick" }); fl.checked = !!s.flicker; fl.addEventListener("change", () => { pushUndo(); s.flicker = fl.checked; afterEdit(false); });
+      side.append(el("label", { class: "tiny", for: "insFlick" }, fl, " flicker"));
+    } else side.append(vecRow("Position", s));
+    side.append(el("div", { style: "display:flex;gap:6px;margin-top:8px" }, el("button", { onclick: duplicateSel }, "Duplicate"), el("button", { onclick: removeSel }, "Delete")));
+  }
+
+  // map settings
+  side.append(el("h2", {}, "Map"));
+  const nm = el("input", { type: "text", id: "mapName", value: map.name });
+  nm.addEventListener("change", () => { pushUndo(); map.name = nm.value || "Custom map"; afterEdit(false); });
+  side.append(fieldRow("Name", nm, "mapName"));
+  side.append(fieldRow("Half size", numField(() => map.half, v => { map.half = Math.max(256, Math.min(16384, v)); }, 64)));
+  side.append(fieldRow("Ceiling Y", numField(() => map.height, v => { map.height = Math.max(128, Math.min(4096, v)); }, 64)));
+  side.append(el("div", { style: "display:flex;gap:6px;flex-wrap:wrap" },
+    el("button", { onclick: () => { pushUndo(); addShell(map); afterEdit(false); setStatus("Added floor, ceiling and outer walls"); } }, "Add shell"),
+    el("button", { onclick: () => { fitView(); draw(); } }, "Fit view")));
+  side.append(el("p", { class: "tiny" }, "The first spawn point is where you start."));
+
+  // checks
+  const issues = check();
+  side.append(el("h2", {}, "Checks"));
+  if (!issues.length) side.append(el("div", { class: "okline" }, "No problems found"));
+  issues.forEach(is => {
+    const b = el("button", { class: "issue " + is.level }, is.text);
+    if (is.ref) b.addEventListener("click", () => { sel = is.ref; if (view === "top") { const p = selPoint() || (getSel().trigger ? [(getSel().trigger[0] + getSel().trigger[3]) / 2, 0, (getSel().trigger[2] + getSel().trigger[5]) / 2] : null); if (p) { cam.x = p[0]; cam.z = p[2]; } } buildSide(); draw(); });
+    side.append(b);
+  });
+  side.append(el("p", { class: "tiny" }, "A quick check. The game's mapcheck command is the full one, including reachability."));
+  $("counts").textContent = `${map.solids.length} solids · ${map.pickups.length} pickups · ${map.spawns.length} spawns · ${map.pads.length} pads`;
+}
+
+/* ---------------------------------------------------------------- header controls */
+$("btnUndo").onclick = undo; $("btnRedo").onclick = redo; $("btnExport").onclick = doExport; $("btnImport").onclick = doImport;
+$("tplSel").addEventListener("change", e => {
+  const v = e.target.value; e.target.value = ""; if (!v) return;
+  pushUndo(); map = v === "arena" ? parseMap(JSON.stringify(ARENA)) : emptyMap(); sel = null; fitView(); afterEdit(true);
+  setStatus(v === "arena" ? "Loaded the Classic Arena; edit it and export as your own map" : "New empty room");
+});
+function setView(v) { view = v; $("vTop").classList.toggle("active", v === "top"); $("v3d").classList.toggle("active", v === "3d"); $("vFit").hidden = v === "3d"; draw(); }
+$("vTop").onclick = () => setView("top"); $("v3d").onclick = () => setView("3d"); $("vFit").onclick = () => { fitView(); draw(); };
+["snap", "showDecor", "lockShell"].forEach(id => $(id).addEventListener("change", draw));
+PICKUP_KINDS.forEach(([v, l]) => $("pickupKind").append(el("option", { value: v }, l)));
+addEventListener("resize", resize);
+new ResizeObserver(resize).observe($("stage"));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* ---------------------------------------------------------------- boot */
+(function boot() {
+  let m = null;
+  const stored = load();
+  if (stored) { try { m = parseMap(JSON.stringify({ format: 1, ...stored })); } catch (e) { m = null; } }
+  map = m || parseMap(JSON.stringify(ARENA));
+  setTool("select"); resize(); fitView(); buildSide(); draw(); updateUndoButtons();
+  setStatus(m ? "Restored your last session" : "Classic Arena loaded as an example; Export saves JSON for the game");
+})();
+</script>
+</body>
+</html>

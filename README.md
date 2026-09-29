@@ -55,6 +55,21 @@ grenade launcher in the bunkers, rocket launcher on the east ledge. A collected 
 100 shells / 200 nails / 100 rockets. Bots collect items too and head for health when hurt. `pickups` lists what's ready.
 Pickups are drawn as procedurally painted pixel-art sprites (no image files): a distinct silhouette for each of the eight guns, a first-aid case, and shells / nails / rockets / cells / slugs, each on a coloured glow that matches its light. They bob over a floor pad and always face the camera; `r_plain 1` swaps them back to flat coloured cubes.
 
+## Map editor
+
+`editor/index.html` is a self-contained HTML5 editor (open it in any browser; no build step, no server). It starts on the Classic Arena
+as an example, or an empty room from the template menu, and saves your work in the browser between sessions.
+
+- **Top view** with a snapped grid: draw boxes (Base Y / Top Y set their height), then drag to move, drag the corners to resize, arrows to nudge,
+  Ctrl+D duplicate, Del delete, Ctrl+Z / Ctrl+Y undo and redo. Wheel zooms, right-drag or Space-drag pans. A **3D** button shows a quick orbitable preview.
+- Place spawns, every pickup type, jump pads (drag the diamond to aim the arc), red and blue flag bases, dummies and lights. Anything you place snaps to the floor below it.
+- A **Checks** panel flags spawns and items that are stuck or floating, flags inside walls, and pads aimed into walls; click an entry to jump to it.
+- **Export** shows the JSON to copy or download. In the game, `map file <path>` loads it, `mapcheck` runs the full check (including reachability on foot),
+  and `map save <path>` writes the current map, so any map (including a random one) can be opened in the editor via **Import**. Capture the flag works on
+  custom maps that have both flag bases; otherwise the two farthest spawns are used.
+
+The file format is versioned JSON, described by `MapJson` in `src/Qnova.Core/MapJson.cs`; `maps/` has the Classic Arena and a random map as samples.
+
 ## Capture the flag
 
 Pick **GAME MODE: CAPTURE THE FLAG** in the menu (or `gamemode ctf` in the console; `gamemode dm` goes back). It reloads the current map
