@@ -40,8 +40,12 @@ public sealed class Bot
 
         int skill = Math.Clamp(g.BotSkill, 1, 5);
         // Bots don't scavenge for ammo; they simply never run dry.
-        me.Shells = Math.Max(me.Shells, 20); me.Nails = Math.Max(me.Nails, 100); me.Rockets = Math.Max(me.Rockets, 10);
-        me.Cells = Math.Max(me.Cells, 100); me.Slugs = Math.Max(me.Slugs, 10);
+        foreach (var w in me.Owned)
+        {
+            var def0 = WeaponDef.Get(w);
+            int floor = def0.Ammo switch { AmmoType.Shells => 20, AmmoType.Nails => 100, AmmoType.Rockets => 10, AmmoType.Cells => 100, AmmoType.Slugs => 10, _ => 0 };
+            if (floor > 0 && me.Ammo(def0.Ammo) < floor) me.AddAmmo(def0.Ammo, floor - me.Ammo(def0.Ammo));
+        }
 
         var enemy = g.Player;
         var pos = me.Move.Position;
@@ -131,11 +135,17 @@ public sealed class Bot
         if (t < _weaponCheck) return;
         _weaponCheck = t + 0.8f;
         // Close: double shotgun. Mid range: lightning up to its reach, rockets beyond. Far: the rail (better bots only).
-        me.Current = dist < 200 ? WeaponId.SuperShotgun
-                   : dist < 700 ? WeaponId.LightningGun
-                   : dist < 1500 ? WeaponId.RocketLauncher
-                   : skill >= 3 ? WeaponId.Railgun : WeaponId.SuperNailgun;
+        var prefs = dist < 200 ? Close : dist < 700 ? Mid : dist < 1500 ? Far : (skill >= 3 ? Sniping : Distant);
+        foreach (var w in prefs)
+            if (me.Owned.Contains(w) && me.Ammo(WeaponDef.Get(w).Ammo) >= WeaponDef.Get(w).AmmoPerShot) { me.Current = w; return; }
     }
+
+    // Weapon preferences by range; class loadouts in Team Fortress own only some of these.
+    static readonly WeaponId[] Close = { WeaponId.SuperShotgun, WeaponId.SuperNailgun, WeaponId.Nailgun, WeaponId.Shotgun, WeaponId.Axe };
+    static readonly WeaponId[] Mid = { WeaponId.LightningGun, WeaponId.RocketLauncher, WeaponId.SuperNailgun, WeaponId.Nailgun, WeaponId.GrenadeLauncher, WeaponId.SuperShotgun, WeaponId.Shotgun, WeaponId.Axe };
+    static readonly WeaponId[] Far = { WeaponId.RocketLauncher, WeaponId.SuperNailgun, WeaponId.Nailgun, WeaponId.GrenadeLauncher, WeaponId.Railgun, WeaponId.Shotgun, WeaponId.Axe };
+    static readonly WeaponId[] Distant = { WeaponId.SuperNailgun, WeaponId.Nailgun, WeaponId.RocketLauncher, WeaponId.GrenadeLauncher, WeaponId.Shotgun, WeaponId.Axe };
+    static readonly WeaponId[] Sniping = { WeaponId.Railgun, WeaponId.RocketLauncher, WeaponId.SuperNailgun, WeaponId.Nailgun, WeaponId.GrenadeLauncher, WeaponId.Shotgun, WeaponId.Axe };
 
     static Vector3 AimPoint(Player enemy, WeaponDef def, float dist, int skill)
     {

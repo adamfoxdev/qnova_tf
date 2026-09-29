@@ -159,7 +159,8 @@ if (args.Contains("--keybinds"))                       // open Options > Key Bin
     menu.SetSelected(4); menu.Select(); menu.SetSelected(9); menu.Select(); menu.SetSelected(4);
     if (args.Contains("--capture")) menu.Select();
 }
-if (args.Contains("--ctf")) game.SetMode(GameMode.Ctf);   // capture the flag on whatever map is loaded
+if (args.Contains("--tf")) game.SetMode(GameMode.TeamFortress);   // team fortress: capture the flag with classes
+else if (args.Contains("--ctf")) game.SetMode(GameMode.Ctf);   // capture the flag on whatever map is loaded
 if (devPos != null)
 {
     var pp = devPos.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => float.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
@@ -591,6 +592,12 @@ while (!quit && !Raylib.WindowShouldClose())
     }
     Raylib.DrawText($"HP {Math.Max(0, p.Health)}   {w.Name}   shells {p.Shells}  nails {p.Nails}  rockets {p.Rockets}  cells {p.Cells}  slugs {p.Slugs}   frags {p.Frags}", 16, 680, 22, Color.White);
     Raylib.DrawText($"speed {speed:0}  {(p.Move.OnGround ? "ground" : "air")}", 16, 16, 22, Color.White);
+    if (game.IsTf)
+    {
+        string cl = p.Class == PlayerClass.None ? "" : ClassDef.Get(p.Class).Name.ToUpperInvariant();
+        if (p.NextClass != p.Class) cl += $"  (next: {ClassDef.Get(p.NextClass).Name})";
+        Raylib.DrawText(cl, 16, 660 - 60, 22, new Color(255, 220, 120, 255));
+    }
     Raylib.DrawText(game.MapName, Raylib.GetScreenWidth() - 16 - Raylib.MeasureText(game.MapName, 16), Raylib.GetScreenHeight() - 26, 16, new Color(150, 150, 150, 255));
     Raylib.DrawText($"{KeyName(InputAction.Forward)}/{KeyName(InputAction.MoveLeft)}/{KeyName(InputAction.Back)}/{KeyName(InputAction.MoveRight)} move  {KeyName(InputAction.Jump)} jump  MOUSE look  {KeyName(InputAction.Fire)} fire  {KeyName(InputAction.Zoom)} zoom  {KeyName(InputAction.Grapple)} hook  {KeyName(InputAction.PrevWeapon)}/{KeyName(InputAction.NextWeapon)} weapon  {KeyName(InputAction.Mute)} mute  {KeyName(InputAction.Respawn)} reset  ~ console  ESC menu", 16, 44, 16, Color.Gray);
     if (!p.Alive)
@@ -641,7 +648,8 @@ while (!quit && !Raylib.WindowShouldClose())
     foreach (var c in game.Combatants.OrderByDescending(c => c.Frags))
     {
         var scol = c == p ? Color.Yellow : c.Team == Team.Red ? new Color(255, 130, 120, 255) : c.Team == Team.Blue ? new Color(130, 170, 255, 255) : Color.White;
-        Raylib.DrawText($"{c.Name,-6} {c.Frags,3} / {c.Deaths,-3}", sx, sy, 20, scol);
+        string cls = game.IsTf && c.Class != PlayerClass.None ? $" {ClassDef.Get(c.Class).Name[..3].ToUpperInvariant()}" : "";
+        Raylib.DrawText($"{c.Name,-6} {c.Frags,3} / {c.Deaths,-3}{cls}", sx - (cls.Length > 0 ? 50 : 0), sy, 20, scol);
         sy += 22;
     }
 

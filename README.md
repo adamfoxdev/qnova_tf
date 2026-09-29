@@ -68,6 +68,23 @@ as a 2v2: you and one bot are **Red**, two bots are **Blue**, with no friendly f
   returns a dropped flag or hunts the thief, and a carrier runs home instead of duelling. Bot navigation is simple steering, so on
   random maps with stairs and walls between the bases they may struggle to get across.
 
+## Team Fortress
+
+Pick **GAME MODE: TEAM FORTRESS** in the menu (or `gamemode tf`, or start with `--tf`). It is capture the flag (same 2v2 teams, flags and
+scoring) with **classes**: every spawn gives you a fixed loadout, health pool and run speed instead of scavenging for guns.
+
+| Class | Health | Speed | Weapons |
+|---|---|---|---|
+| Scout | 75 | 1.30x | Axe, Shotgun, **Double Shotgun** |
+| Soldier | 125 | 0.90x | Axe, Shotgun, **Rocket Launcher** |
+| Demoman | 100 | 1.00x | Axe, Shotgun, **Grenade Launcher** |
+| Medic | 90 | 1.10x | Axe, Shotgun, **Nailgun**; heals teammates in line of sight within 320 units (8 hp/s) and itself (2 hp/s) |
+| Heavy | 200 | 0.75x | Axe, Double Shotgun, **Super Nailgun** |
+| Sniper | 80 | 1.00x | Axe, Shotgun, **Railgun** |
+
+Choose with `class <name|1-6>` or Options > CLASS; it applies when you next respawn (`kill` to switch now). `class` alone lists them. Bots get a
+spread of classes and only use weapons their class owns. Class logic is in `Qnova.Core/Classes.cs` and `TeamFortress.cs`.
+
 ## Splash screen and menu
 
 The game opens on a dark, gritty splash: **QNOVA** in riveted steel with a furnace burning in the O that detonates every

@@ -18,6 +18,9 @@ public sealed class Player
     public int Id;                // 0 = the human, 1.. = bots (used to tell victims apart in events)
     public bool IsBot;
     public Team Team;             // None outside capture the flag
+    public PlayerClass Class;     // current Team Fortress class (None outside that mode)
+    public PlayerClass NextClass = PlayerClass.Soldier;   // class you will spawn as next
+    public float HealBuffer;      // fractional healing carried between ticks
     public readonly Hook Hook = new();
     public bool GrappleHeld;      // previous-tick state of the grapple key (for press detection)
     public float PadCooldownUntil;
