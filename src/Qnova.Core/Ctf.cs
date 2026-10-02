@@ -40,7 +40,9 @@ public sealed partial class GameWorld
     readonly Dictionary<Team, List<Vector3>> _teamSpawns = new();
     MapData? _current;
 
-    public bool IsCtf => Mode == GameMode.Ctf;
+    /// <summary>Flags and teams are in play (capture the flag, and Team Fortress which adds classes on top).</summary>
+    public bool IsCtf => Mode != GameMode.Deathmatch;
+    public bool IsTf => Mode == GameMode.TeamFortress;
 
     /// <summary>The loaded map as data (for saving and checking). A game built directly by <see cref="Arena.Build"/> never went through LoadMap.</summary>
     public MapData SnapshotMap() => _current ?? (MapName == "Classic Arena" ? Arena.Data() : MapData.From(this, MapName, MapSeed, MapHalf, CeilingY));
