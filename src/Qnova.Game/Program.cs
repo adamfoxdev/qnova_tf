@@ -599,7 +599,10 @@ while (!quit && !Raylib.WindowShouldClose())
         Raylib.DrawText(cl, 16, 660 - 60, 22, new Color(255, 220, 120, 255));
     }
     Raylib.DrawText(game.MapName, Raylib.GetScreenWidth() - 16 - Raylib.MeasureText(game.MapName, 16), Raylib.GetScreenHeight() - 26, 16, new Color(150, 150, 150, 255));
-    Raylib.DrawText($"{KeyName(InputAction.Forward)}/{KeyName(InputAction.MoveLeft)}/{KeyName(InputAction.Back)}/{KeyName(InputAction.MoveRight)} move  {KeyName(InputAction.Jump)} jump  MOUSE look  {KeyName(InputAction.Fire)} fire  {KeyName(InputAction.Zoom)} zoom  {KeyName(InputAction.Grapple)} hook  {KeyName(InputAction.PrevWeapon)}/{KeyName(InputAction.NextWeapon)} weapon  {KeyName(InputAction.Mute)} mute  {KeyName(InputAction.Respawn)} reset  ~ console  ESC menu", 16, 44, 16, Color.Gray);
+    string hint = $"{KeyName(InputAction.Forward)}/{KeyName(InputAction.MoveLeft)}/{KeyName(InputAction.Back)}/{KeyName(InputAction.MoveRight)} move  {KeyName(InputAction.Jump)} jump  MOUSE look  {KeyName(InputAction.Fire)} fire  {KeyName(InputAction.Zoom)} zoom  {KeyName(InputAction.Grapple)} hook  {KeyName(InputAction.PrevWeapon)}/{KeyName(InputAction.NextWeapon)} weapon  {KeyName(InputAction.Mute)} mute  {KeyName(InputAction.Respawn)} reset  ~ console  ESC menu";
+    int hintSize = 16;                                    // shrink to fit rather than run off the right edge
+    while (hintSize > 10 && Raylib.MeasureText(hint, hintSize) > Raylib.GetScreenWidth() - 32) hintSize--;
+    Raylib.DrawText(hint, 16, 44, hintSize, Color.Gray);
     if (!p.Alive)
     {
         float left = Math.Max(0f, p.RespawnAt - game.Time);
@@ -622,8 +625,9 @@ while (!quit && !Raylib.WindowShouldClose())
     {
         int cw = Raylib.GetScreenWidth();
         string sc = $"RED {game.TeamScore[1]}  -  {game.TeamScore[2]} BLUE";
-        Raylib.DrawText(sc, cw / 2 - Raylib.MeasureText(sc, 30) / 2, 12, 30, Color.White);
-        Raylib.DrawText($"first to {game.CaptureLimit}", cw / 2 - Raylib.MeasureText($"first to {game.CaptureLimit}", 16) / 2, 44, 16, Color.Gray);
+        int scw = Raylib.MeasureText(sc, 30);
+        Raylib.DrawText(sc, cw / 2 - scw / 2, 12, 30, Color.White);
+        Raylib.DrawText($"first to {game.CaptureLimit}", cw / 2 + scw / 2 + 14, 22, 16, Color.Gray);   // beside the score, clear of the hint line
         string FlagText(Team t)
         {
             var f = game.FlagOf(t)!;
