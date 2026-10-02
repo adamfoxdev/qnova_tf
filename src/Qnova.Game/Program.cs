@@ -644,12 +644,12 @@ while (!quit && !Raylib.WindowShouldClose())
     }
 
     // scoreboard (top right)
-    int sy = 16, sx = Raylib.GetScreenWidth() - 260;
+    int sy = 72, sx = Raylib.GetScreenWidth() - (game.IsTf ? 310 : 260);   // below the controls hint line, which spans the top
     foreach (var c in game.Combatants.OrderByDescending(c => c.Frags))
     {
         var scol = c == p ? Color.Yellow : c.Team == Team.Red ? new Color(255, 130, 120, 255) : c.Team == Team.Blue ? new Color(130, 170, 255, 255) : Color.White;
         string cls = game.IsTf && c.Class != PlayerClass.None ? $" {ClassDef.Get(c.Class).Name[..3].ToUpperInvariant()}" : "";
-        Raylib.DrawText($"{c.Name,-6} {c.Frags,3} / {c.Deaths,-3}{cls}", sx - (cls.Length > 0 ? 50 : 0), sy, 20, scol);
+        Raylib.DrawText($"{c.Name,-6} {c.Frags,3} / {c.Deaths,-3}{cls}", sx, sy, 20, scol);
         sy += 22;
     }
 
